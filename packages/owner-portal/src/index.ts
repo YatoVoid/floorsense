@@ -17,12 +17,15 @@ export {
   renderCalibrationResult,
   renderVenueCreationForm,
   buildVenueCreationPayload,
+  renderApNodePlacementForm,
+  buildApNodeCreationPayload,
 } from "./dashboardPage.ts";
 export type {
   HeatmapUpgradeRequired,
   MarkedPosition,
   CalibrationSampleValidationResult,
   VenueCreationValidationResult,
+  ApNodeCreationValidationResult,
 } from "./dashboardPage.ts";
 export { runDashboardDemo } from "./dashboardDemo.ts";
 export type { DashboardDemoResult } from "./dashboardDemo.ts";
@@ -30,3 +33,5 @@ export { runCalibrationToolDemo } from "./calibrationToolDemo.ts";
 export type { CalibrationToolDemoResult } from "./calibrationToolDemo.ts";
 export { runOnboardingDemo } from "./onboardingDemo.ts";
 export type { OnboardingDemoResult } from "./onboardingDemo.ts";
+export { runApNodeCreationDemo } from "./apNodeCreationDemo.ts";
+export type { ApNodeCreationDemoResult } from "./apNodeCreationDemo.ts";
