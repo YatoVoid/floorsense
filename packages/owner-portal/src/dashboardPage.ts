@@ -542,6 +542,13 @@ ${embeddedFunctions}
       return token ? { Authorization: "Bearer " + token } : {};
     }
 
+    function handleAuthFailure() {
+      localStorage.removeItem(TOKEN_KEY);
+      document.getElementById("app-section").style.display = "none";
+      document.getElementById("login-form").style.display = "block";
+      document.getElementById("login-error").textContent = "Your session expired. Please log in again.";
+    }
+
     function showApp() {
       document.getElementById("login-form").style.display = "none";
       document.getElementById("app-section").style.display = "block";
@@ -550,14 +557,21 @@ ${embeddedFunctions}
 
     function loadBillingSection() {
       fetch("/billing/history", { headers: authHeaders() })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (res.status === 401) { handleAuthFailure(); return null; }
+          return res.json();
+        })
         .then(function (history) {
+          if (!history) return;
           document.getElementById("billing-section-container").innerHTML = renderBillingSection(history);
           var simulateButton = document.getElementById("simulate-monthly-charge-button");
           if (simulateButton) {
             simulateButton.addEventListener("click", function () {
               fetch("/billing/simulate-monthly-charge", { method: "POST", headers: authHeaders() })
-                .then(function () { loadBillingSection(); });
+                .then(function (res) {
+                  if (res.status === 401) { handleAuthFailure(); return; }
+                  loadBillingSection();
+                });
             });
           }
         });
@@ -565,8 +579,12 @@ ${embeddedFunctions}
 
     function loadVenues() {
       fetch("/venues", { headers: authHeaders() })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (res.status === 401) { handleAuthFailure(); return null; }
+          return res.json();
+        })
         .then(function (venues) {
+          if (!venues) return;
           venuesById = {};
           venues.forEach(function (venue) { venuesById[venue.id] = venue; });
 
@@ -609,8 +627,14 @@ ${embeddedFunctions}
           headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
           body: JSON.stringify(validation.payload),
         })
-          .then(function (res) { return res.json(); })
-          .then(function () { loadVenues(); });
+          .then(function (res) {
+            if (res.status === 401) { handleAuthFailure(); return null; }
+            return res.json();
+          })
+          .then(function (result) {
+            if (!result) return;
+            loadVenues();
+          });
       });
     }
 
@@ -621,20 +645,32 @@ ${embeddedFunctions}
       pendingApNodePosition = null;
 
       fetch("/venues/" + venueId + "/heatmap", { headers: authHeaders() })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (res.status === 401) { handleAuthFailure(); return; }
+          return res.json();
+        })
         .then(function (heatmapResponse) {
+          if (heatmapResponse === undefined) return;
           document.getElementById("heatmap-container").innerHTML = renderHeatmapSection(heatmapResponse);
         });
 
       fetch("/venues/" + venueId + "/return-visit-stats", { headers: authHeaders() })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (res.status === 401) { handleAuthFailure(); return null; }
+          return res.json();
+        })
         .then(function (stats) {
+          if (!stats) return;
           document.getElementById("stats-container").innerHTML = renderStatsSummary(stats);
         });
 
       fetch("/venues/" + venueId + "/ap-nodes", { headers: authHeaders() })
-        .then(function (res) { return res.json(); })
+        .then(function (res) {
+          if (res.status === 401) { handleAuthFailure(); return null; }
+          return res.json();
+        })
         .then(function (apNodes) {
+          if (!apNodes) return;
           currentApNodes = apNodes;
           renderCalibrationUi();
         });
@@ -683,8 +719,12 @@ ${embeddedFunctions}
             headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
             body: JSON.stringify(validation.payload),
           })
-            .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+            .then(function (res) {
+              if (res.status === 401) { handleAuthFailure(); return null; }
+              return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+            })
             .then(function (result) {
+              if (!result) return;
               if (!result.ok) {
                 document.getElementById("ap-node-form-container").innerHTML += '<p class="error">' + (result.body.error || "Failed to save AP node.") + "</p>";
                 return;
@@ -692,8 +732,12 @@ ${embeddedFunctions}
               addingApNode = false;
               pendingApNodePosition = null;
               fetch("/venues/" + currentVenueId + "/ap-nodes", { headers: authHeaders() })
-                .then(function (res) { return res.json(); })
+                .then(function (res) {
+                  if (res.status === 401) { handleAuthFailure(); return null; }
+                  return res.json();
+                })
                 .then(function (apNodes) {
+                  if (!apNodes) return;
                   currentApNodes = apNodes;
                   renderCalibrationUi();
                 });
@@ -728,8 +772,12 @@ ${embeddedFunctions}
             headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
             body: JSON.stringify(validation.payload),
           })
-            .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+            .then(function (res) {
+              if (res.status === 401) { handleAuthFailure(); return null; }
+              return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+            })
             .then(function (result) {
+              if (!result) return;
               document.getElementById("calibration-result-container").innerHTML = renderCalibrationResult(result);
             });
         });

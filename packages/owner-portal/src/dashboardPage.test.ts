@@ -397,3 +397,18 @@ test("renderDashboardPage: sections are wrapped in cards, and primary/secondary 
   assert.match(html, /\.btn-secondary/, "expected a .btn-secondary style rule");
   assert.match(html, /\.section-card/, "expected a .section-card style rule");
 });
+
+test("renderDashboardPage: an expired/invalid session (401) is handled explicitly at every authenticated fetch, not left to fall through to res.json()", () => {
+  const html = renderDashboardPage();
+  const scriptMatch = /<script>([\s\S]*)<\/script>/.exec(html);
+  const scriptBody = scriptMatch![1]!;
+
+  assert.match(scriptBody, /function handleAuthFailure/);
+  assert.match(scriptBody, /Your session expired/);
+
+  // One 401 check per authenticated fetch call site: loadVenues, loadVenueData's
+  // heatmap/stats/ap-nodes, loadBillingSection, simulate-monthly-charge, venue
+  // creation, ap-node create + reload, calibration submit.
+  const authFailureChecks = (scriptBody.match(/res\.status === 401/g) ?? []).length;
+  assert.ok(authFailureChecks >= 9, `expected at least 9 res.status === 401 checks, found ${authFailureChecks}`);
+});
