@@ -369,3 +369,19 @@ test("renderDashboardPage: produces a page with login form markup, a register to
   // Just parses the source, doesn't run it, so missing browser globals are fine here.
   assert.doesNotThrow(() => new Function(scriptBody), "the embedded page script must be syntactically valid JS");
 });
+
+test("renderDashboardPage: sections are wrapped in cards, and primary/secondary buttons are visually distinguished", () => {
+  const html = renderDashboardPage();
+
+  // At least one card per major dashboard section, not just decoration on one element.
+  const cardCount = (html.match(/class="section-card"/g) ?? []).length;
+  assert.ok(cardCount >= 5, `expected at least 5 section cards, found ${cardCount}`);
+
+  assert.match(html, /id="login-submit-button" type="submit" class="btn btn-primary"/);
+  assert.match(html, /id="logout-button" class="btn btn-secondary"/);
+  assert.match(html, /id="add-ap-node-toggle" class="btn btn-secondary"/);
+
+  assert.match(html, /\.btn-primary/, "expected a .btn-primary style rule");
+  assert.match(html, /\.btn-secondary/, "expected a .btn-secondary style rule");
+  assert.match(html, /\.section-card/, "expected a .section-card style rule");
+});

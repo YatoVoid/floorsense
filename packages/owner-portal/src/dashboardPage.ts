@@ -200,7 +200,7 @@ export function renderCalibrationForm(apNodes: ApNodeRecord[], markedPosition: M
     "</select>" +
     '<label for="calibration-rssi">RSSI reading (enter manually, no live sensor in this browser demo):</label>' +
     '<input type="number" id="calibration-rssi" step="0.1" required />' +
-    '<button type="submit">Record calibration sample</button>' +
+    '<button type="submit" class="btn btn-primary">Record calibration sample</button>' +
     "</form>"
   );
 }
@@ -259,8 +259,8 @@ export function renderApNodePlacementForm(pending: MarkedPosition | null): strin
     '" />' +
     '<label for="ap-node-id">AP node name:</label>' +
     '<input id="ap-node-id" type="text" placeholder="e.g. ap-1" required />' +
-    '<button type="submit">Save AP node</button>' +
-    '<button type="button" id="ap-node-cancel">Cancel</button>' +
+    '<button type="submit" class="btn btn-primary">Save AP node</button>' +
+    '<button type="button" id="ap-node-cancel" class="btn btn-secondary">Cancel</button>' +
     "</form>"
   );
 }
@@ -289,7 +289,7 @@ export function renderVenueCreationForm(): string {
     '<input id="venue-creation-name" type="text" placeholder="Venue name" required />' +
     '<input id="venue-creation-width" type="number" step="0.1" placeholder="Floor width (meters)" required />' +
     '<input id="venue-creation-height" type="number" step="0.1" placeholder="Floor height (meters)" required />' +
-    '<button type="submit">Create venue</button>' +
+    '<button type="submit" class="btn btn-primary">Create venue</button>' +
     "</form>" +
     "</div>"
   );
@@ -376,7 +376,7 @@ export function renderBillingSection(history: BillingHistoryEntry[]): string {
     "<table><thead><tr><th>Date</th><th>Type</th><th>Amount</th></tr></thead><tbody>" +
     rows +
     "</tbody></table>" +
-    '<button type="button" id="simulate-monthly-charge-button">Simulate next monthly charge</button>'
+    '<button type="button" id="simulate-monthly-charge-button" class="btn btn-secondary">Simulate next monthly charge</button>'
   );
 }
 
@@ -410,7 +410,46 @@ export function renderDashboardPage(): string {
   <meta charset="utf-8" />
   <title>FloorSense Owner Dashboard</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    :root {
+      --color-accent: #2563eb;
+      --color-accent-dark: #1d4ed8;
+      --color-muted: #6b7280;
+      --color-border: #e2e8f0;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 1.5rem;
+      --radius: 0.5rem;
+    }
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 40rem;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #1f2937;
+      line-height: 1.5;
+    }
+    h1 { margin-bottom: var(--space-lg); }
+    h2 { margin: 0 0 var(--space-md); font-size: 1.1rem; }
+    .section-card {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-lg);
+      background: #fff;
+    }
+    .btn {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+    .btn-primary:hover { background: var(--color-accent-dark); border-color: var(--color-accent-dark); }
+    .btn-secondary { background: #fff; border-color: var(--color-border); color: #1f2937; }
+    .btn-secondary:hover { background: #f3f4f6; }
     .heatmap-grid { display: grid; gap: 1px; margin: 1rem 0; }
     .heatmap-cell { aspect-ratio: 1; background-color: #eee; }
     .hour-chart { display: flex; align-items: flex-end; gap: 2px; height: 6rem; margin: 1rem 0; }
@@ -418,10 +457,12 @@ export function renderDashboardPage(): string {
     table { border-collapse: collapse; width: 100%; }
     td, th { border: 1px solid #ccc; padding: 0.25rem 0.5rem; text-align: left; }
     .upgrade-required { color: #a00; }
+    .floor-plan-caption { color: var(--color-muted); font-style: italic; margin: 0 0 var(--space-sm); }
     .floor-plan { position: relative; width: 100%; max-width: 30rem; background: #f5f5f5; border: 1px solid #ccc; cursor: crosshair; }
     .ap-node-marker { position: absolute; width: 10px; height: 10px; margin: -5px; background: steelblue; border-radius: 50%; }
     .marked-position-marker { position: absolute; width: 12px; height: 12px; margin: -6px; background: crimson; border-radius: 50%; border: 2px solid #fff; }
     .pending-ap-node-marker { position: absolute; width: 12px; height: 12px; margin: -6px; background: orange; border-radius: 50%; border: 2px dashed #fff; }
+    .no-data { color: var(--color-muted); font-style: italic; }
     .success { color: #060; }
     .error { color: #a00; }
     #app-section { display: none; }
@@ -430,35 +471,47 @@ export function renderDashboardPage(): string {
 <body>
   <h1>FloorSense Owner Dashboard</h1>
 
-  <form id="login-form">
-    <input id="login-name" type="text" placeholder="Owner name" required />
-    <input id="login-password" type="password" placeholder="Password" required />
-    <div id="tier-picker-container" style="display:none;"></div>
-    <button id="login-submit-button" type="submit">Log in</button>
-  </form>
+  <div class="section-card">
+    <form id="login-form">
+      <input id="login-name" type="text" placeholder="Owner name" required />
+      <input id="login-password" type="password" placeholder="Password" required />
+      <div id="tier-picker-container" style="display:none;"></div>
+      <button id="login-submit-button" type="submit" class="btn btn-primary">Log in</button>
+    </form>
+  </div>
   <p id="payment-confirmation" class="success"></p>
   <p><a href="#" id="auth-mode-toggle">New business? Register here</a></p>
   <p id="login-error" style="color:#a00;"></p>
 
   <div id="app-section">
-    <button id="logout-button">Log out</button>
-    <h2>Plan &amp; Billing</h2>
-    <div id="billing-section-container"></div>
-    <p>
-      <label for="venue-select">Venue:</label>
-      <select id="venue-select"></select>
-    </p>
-    <div id="venue-creation-container"></div>
-    <h2>Heatmap</h2>
-    <div id="heatmap-container"><p class="no-data">Select a venue to view its heatmap.</p></div>
-    <h2>Return-visit stats</h2>
-    <div id="stats-container"></div>
-    <h2>Floor-plan calibration</h2>
-    <div id="floor-plan-container"></div>
-    <p><button type="button" id="add-ap-node-toggle">Add AP node</button></p>
-    <div id="ap-node-form-container"></div>
-    <div id="calibration-form-container"></div>
-    <div id="calibration-result-container"></div>
+    <button id="logout-button" class="btn btn-secondary">Log out</button>
+    <div class="section-card">
+      <h2>Plan &amp; Billing</h2>
+      <div id="billing-section-container"></div>
+    </div>
+    <div class="section-card">
+      <p>
+        <label for="venue-select">Venue:</label>
+        <select id="venue-select"></select>
+      </p>
+      <div id="venue-creation-container"></div>
+    </div>
+    <div class="section-card">
+      <h2>Heatmap</h2>
+      <div id="heatmap-container"><p class="no-data">Select a venue to view its heatmap.</p></div>
+    </div>
+    <div class="section-card">
+      <h2>Return-visit stats</h2>
+      <div id="stats-container"></div>
+    </div>
+    <div class="section-card">
+      <h2>Floor-plan calibration</h2>
+      <div id="floor-plan-container"></div>
+      <p><button type="button" id="add-ap-node-toggle" class="btn btn-secondary">Add AP node</button></p>
+      <div id="ap-node-form-container"></div>
+      <div id="calibration-form-container"></div>
+      <div id="calibration-result-container"></div>
+    </div>
   </div>
 
   <script>
