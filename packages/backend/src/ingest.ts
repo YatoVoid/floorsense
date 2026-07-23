@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { isValidApEvent, type ApEvent } from "@floorsense/shared";
+import { hasConsent } from "./consent.ts";
 
 export interface StoredApEvent {
   id: number;
@@ -12,19 +13,31 @@ export interface StoredApEvent {
   timestamp: number;
 }
 
+export type IngestResult =
+  | { accepted: true }
+  | { accepted: false; reason: "invalid_event" | "no_consent" };
+
 /**
- * Persists a single ApEvent. Validates the event's shape before writing —
- * a malformed event is rejected (returns false), never silently stored.
+ * Persists a single ApEvent — but only for a device that already has a
+ * consent_grants row for this tenant/venue. This is the structural
+ * enforcement point for the "no session without consent" invariant: every
+ * event type (join/leave/signal_reading) is gated here, not just join, so a
+ * device can never be tracked in any form before it has gone through the
+ * captive portal's accept step.
  */
-export function ingestApEvent(db: DatabaseSync, event: unknown): boolean {
-  if (!isValidApEvent(event)) return false;
+export function ingestApEvent(db: DatabaseSync, event: unknown): IngestResult {
+  if (!isValidApEvent(event)) return { accepted: false, reason: "invalid_event" };
+
+  if (!hasConsent(db, event.tenantId, event.venueId, event.hashedDeviceId)) {
+    return { accepted: false, reason: "no_consent" };
+  }
 
   const rssi = event.type === "signal_reading" ? event.rssi : null;
   db.prepare(
     `INSERT INTO ap_events (tenant_id, venue_id, ap_node_id, hashed_device_id, event_type, rssi, timestamp)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(event.tenantId, event.venueId, event.apNodeId, event.hashedDeviceId, event.type, rssi, event.timestamp);
-  return true;
+  return { accepted: true };
 }
 
 /**

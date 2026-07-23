@@ -1,0 +1,28 @@
+# FloorSense captive-portal AP — hostapd configuration template
+#
+# TEMPLATE ONLY. This file is never read or executed by any code in this
+# repository, and no automated process here runs hostapd or touches a
+# real wireless interface. Copying this onto a real AP device and
+# starting the hostapd service is a manual, deliberate operator action —
+# see README.md in this directory for the full real-deployment flow.
+#
+# Placeholders to replace before use:
+#   <WLAN_INTERFACE>   e.g. wlan0 — the wireless interface put into AP mode
+#   <SSID_NAME>        e.g. FloorSense-Guest — the open network name shown to devices
+#   <CHANNEL>          e.g. 6 — 2.4GHz channel (1/6/11 avoid overlap in most regions)
+
+interface=<WLAN_INTERFACE>
+driver=nl80211
+ssid=<SSID_NAME>
+hw_mode=g
+channel=<CHANNEL>
+auth_algs=1
+wmm_enabled=1
+ignore_broadcast_ssid=0
+
+# Deliberately open — no WPA/WPA2 passphrase. This network's entire
+# purpose is to be joinable by any device without a credential; consent
+# capture happens at the captive-portal HTTP layer (see dnsmasq.conf.template
+# and redirect-rules.nft.template in this directory), never at the network
+# authentication layer.
+wpa=0

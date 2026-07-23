@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Demo Cafe — WiFi Notice</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    h1 { font-size: 1.5rem; text-align: center; }
+    .ssid { text-align: center; font-size: 1.1rem; font-weight: bold; margin: 1rem 0; }
+    .qr-placeholder {
+      width: 8rem; height: 8rem; margin: 1.5rem auto; border: 2px dashed #888;
+      display: flex; align-items: center; justify-content: center; text-align: center; font-size: 0.75rem; color: #555;
+    }
+    .summary { font-size: 0.95rem; }
+    @media print {
+      body { margin: 0; padding: 1rem; }
+      .qr-placeholder { border: 2px solid #000; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Connecting to Demo Cafe WiFi</h1>
+  <p class="ssid">Network: FloorSense-Guest</p>
+  <div class="qr-placeholder">[ QR code placeholder ]<br />http://10.90.0.1:8080/</div>
+  <div class="summary">
+    <p>Demo Cafe uses this free WiFi network to understand how busy the space is at different times and to improve service. Here&#39;s exactly what that means:</p>
+    <p><strong>Collected:</strong></p>
+    <ul>
+        <li>A one-way scrambled code derived from your device — it cannot be reversed back into your device&#39;s real address.</li>
+        <li>Signal strength readings, used only to estimate where in the venue your device is.</li>
+        <li>Timestamps of when your device is seen, and for how long.</li>
+    </ul>
+    <p><strong>Never collected:</strong></p>
+    <ul>
+        <li>Your device&#39;s real hardware (MAC) address — never stored or transmitted.</li>
+        <li>Any browsing activity, app usage, or message content.</li>
+        <li>Your location once you leave the venue&#39;s WiFi range.</li>
+        <li>Any personal details — name, phone number, or account — unless you separately give them to staff.</li>
+    </ul>
+    <p>This data is kept by the venue for their own use and is never sold. You can decline and still use the venue normally without connecting to this WiFi network — connecting is optional.</p>
+  </div>
+</body>
+</html>

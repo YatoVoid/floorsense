@@ -1,0 +1,32 @@
+# FloorSense captive-portal AP — dnsmasq configuration template (DHCP + DNS)
+#
+# TEMPLATE ONLY. Never read or executed automatically by this codebase.
+# An operator manually copies this to /etc/dnsmasq.conf (or a
+# /etc/dnsmasq.d/ fragment) on the AP device and restarts dnsmasq
+# themselves. See README.md in this directory for the full flow.
+#
+# Placeholders to replace before use:
+#   <WLAN_INTERFACE>     e.g. wlan0
+#   <AP_IP>              e.g. 10.90.0.1 — the AP's own address on this subnet
+#   <DHCP_RANGE_START>   e.g. 10.90.0.10
+#   <DHCP_RANGE_END>     e.g. 10.90.0.200
+
+interface=<WLAN_INTERFACE>
+dhcp-range=<DHCP_RANGE_START>,<DHCP_RANGE_END>,12h
+dhcp-option=option:router,<AP_IP>
+dhcp-option=option:dns-server,<AP_IP>
+
+# DNS hijack: resolve every hostname a newly-joined device queries to the
+# AP's own address, so any HTTP request it makes lands on the captive
+# portal instead of the real internet. This is what makes the pre-consent
+# "walled garden" experience work at the DNS layer — combined with the
+# port-redirect rules in redirect-rules.nft.template, a device that
+# hasn't accepted the splash page cannot reach anything but the portal.
+address=/#/<AP_IP>
+
+# Keep dnsmasq's own lease log local and short-lived — it is standard
+# DHCP server operation (any router does this to hand out addresses) and
+# is not part of FloorSense's application-level data model; the
+# consent_grants and ap_events tables never read from this file directly.
+dhcp-leasefile=/var/lib/misc/floorsense-dnsmasq.leases
+log-facility=/var/log/floorsense-dnsmasq.log

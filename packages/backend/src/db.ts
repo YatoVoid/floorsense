@@ -55,6 +55,16 @@ CREATE INDEX IF NOT EXISTS idx_ap_events_tenant_venue
 
 CREATE INDEX IF NOT EXISTS idx_ap_events_hashed_device_id
   ON ap_events (tenant_id, hashed_device_id);
+
+CREATE TABLE IF NOT EXISTS consent_grants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  venue_id TEXT NOT NULL,
+  hashed_device_id TEXT NOT NULL,
+  accepted_at INTEGER NOT NULL,
+  terms_version TEXT NOT NULL,
+  UNIQUE (tenant_id, venue_id, hashed_device_id)
+);
 `;
 
 /**
