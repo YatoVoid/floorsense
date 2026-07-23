@@ -61,6 +61,67 @@ test("trilateration recovers a known point from 3 noiseless AP-node readings", (
   assert.deepStrictEqual(new Set(estimate.apNodeIdsUsed), new Set(["ap-1", "ap-2", "ap-3"]));
 });
 
+/** Unweighted reference copy of the pre-weighting trilateration algorithm, used only to prove the weighted version is a real improvement, not a stand-in for it. */
+function unweightedTrilaterateForComparison(
+  matched: Array<{ x: number; y: number; distance: number }>
+): { x: number; y: number } | null {
+  const ref = matched[0];
+  if (!ref) return null;
+  let ata00 = 0;
+  let ata01 = 0;
+  let ata11 = 0;
+  let atb0 = 0;
+  let atb1 = 0;
+  for (let i = 1; i < matched.length; i++) {
+    const m = matched[i];
+    if (!m) continue;
+    const a1 = 2 * (m.x - ref.x);
+    const a2 = 2 * (m.y - ref.y);
+    const b = m.x * m.x - ref.x * ref.x + (m.y * m.y - ref.y * ref.y) - (m.distance * m.distance - ref.distance * ref.distance);
+    ata00 += a1 * a1;
+    ata01 += a1 * a2;
+    ata11 += a2 * a2;
+    atb0 += a1 * b;
+    atb1 += a2 * b;
+  }
+  const det = ata00 * ata11 - ata01 * ata01;
+  return { x: (atb0 * ata11 - ata01 * atb1) / det, y: (ata00 * atb1 - atb0 * ata01) / det };
+}
+
+test("weighted trilateration recovers a known point MORE accurately than the unweighted algorithm when one anchor's reading is noisy", () => {
+  const apNodes: ApNodePosition[] = [
+    { apNodeId: "ap-1", x: 0, y: 0 },
+    { apNodeId: "ap-2", x: 10, y: 0 },
+    { apNodeId: "ap-3", x: 5, y: 10 },
+  ];
+  const truth = { x: 5, y: 3 };
+  const trueDistances = apNodes.map((n) => Math.hypot(truth.x - n.x, truth.y - n.y));
+
+  // ap-3's reading is deliberately way off (reported as much farther than it
+  // truly is), simulating a noisy/unreliable radio - inverse-square weighting
+  // should down-weight it heavily since it looks like the least reliable anchor.
+  const noisyDistances = [trueDistances[0]!, trueDistances[1]!, trueDistances[2]! + 15];
+  const readings = apNodes.map((n, i) => ({
+    apNodeId: n.apNodeId,
+    rssi: rssiAtDistance(noisyDistances[i]!, PROFILE),
+  }));
+
+  const weightedEstimate = estimateDevicePosition(readings, apNodes, PROFILE);
+  assert.strictEqual(weightedEstimate.confidence, "trilaterated");
+  assert.ok(weightedEstimate.confidence === "trilaterated");
+  const weightedError = Math.hypot(weightedEstimate.x - truth.x, weightedEstimate.y - truth.y);
+
+  const matchedForComparison = apNodes.map((n, i) => ({ x: n.x, y: n.y, distance: noisyDistances[i]! }));
+  const unweighted = unweightedTrilaterateForComparison(matchedForComparison);
+  assert.ok(unweighted);
+  const unweightedError = Math.hypot(unweighted!.x - truth.x, unweighted!.y - truth.y);
+
+  assert.ok(
+    weightedError < unweightedError,
+    `expected weighted error (${weightedError}) to be smaller than unweighted error (${unweightedError})`
+  );
+});
+
 test("2 AP-node readings fall back to a weighted centroid, reachable and in-bounds", () => {
   const apNodes: ApNodePosition[] = [
     { apNodeId: "ap-1", x: 0, y: 0 },

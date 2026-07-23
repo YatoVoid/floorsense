@@ -80,9 +80,19 @@ const SINGULARITY_EPSILON = 1e-9;
 /** Collinearity guard: near 1 means the anchors barely span 2D space. */
 const COLLINEARITY_THRESHOLD = 1 - 1e-6;
 
-/** Linearized least-squares multilateration (subtract one anchor's circle equation from the rest, solve via Cramer's rule). Returns null instead of NaN/Infinity for a near-collinear anchor layout. */
+/**
+ * Linearized weighted least-squares multilateration (subtract the closest
+ * anchor's circle equation from the rest, solve via Cramer's rule). The
+ * closest anchor is used as the pivot (most reliable reading), and each
+ * remaining equation is weighted by its own anchor's inverse-square
+ * distance - the same reliability weighting weightedCentroid already uses,
+ * so a farther/noisier anchor pulls the solved position less than a
+ * closer/stronger one. Returns null instead of NaN/Infinity for a
+ * near-collinear anchor layout.
+ */
 function trilaterate(matched: MatchedReading[]): Point | null {
-  const ref = matched[0];
+  const sorted = [...matched].sort((a, b) => a.distance - b.distance);
+  const ref = sorted[0];
   if (!ref) return null;
 
   let ata00 = 0;
@@ -91,8 +101,8 @@ function trilaterate(matched: MatchedReading[]): Point | null {
   let atb0 = 0;
   let atb1 = 0;
 
-  for (let i = 1; i < matched.length; i++) {
-    const m = matched[i];
+  for (let i = 1; i < sorted.length; i++) {
+    const m = sorted[i];
     if (!m) continue;
     const a1 = 2 * (m.x - ref.x);
     const a2 = 2 * (m.y - ref.y);
@@ -102,11 +112,14 @@ function trilaterate(matched: MatchedReading[]): Point | null {
       (m.y * m.y - ref.y * ref.y) -
       (m.distance * m.distance - ref.distance * ref.distance);
 
-    ata00 += a1 * a1;
-    ata01 += a1 * a2;
-    ata11 += a2 * a2;
-    atb0 += a1 * b;
-    atb1 += a2 * b;
+    const d = Math.max(m.distance, 0.1);
+    const weight = 1 / (d * d);
+
+    ata00 += weight * a1 * a1;
+    ata01 += weight * a1 * a2;
+    ata11 += weight * a2 * a2;
+    atb0 += weight * a1 * b;
+    atb1 += weight * a2 * b;
   }
 
   if (ata00 < SINGULARITY_EPSILON || ata11 < SINGULARITY_EPSILON) return null;
