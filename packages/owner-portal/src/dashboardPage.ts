@@ -119,8 +119,12 @@ export function renderFloorPlan(
   venue: Venue,
   apNodes: ApNodeRecord[],
   markedPosition: MarkedPosition | null,
-  pendingApNodePosition: MarkedPosition | null
+  pendingApNodePosition: MarkedPosition | null,
+  addingApNode: boolean
 ): string {
+  const caption = addingApNode
+    ? "Click to place a new AP node."
+    : "Click to mark a calibration position.";
   const aspectRatio = venue.floorWidth / venue.floorHeight;
 
   const toPct = (pos: MarkedPosition) => ({
@@ -158,6 +162,9 @@ export function renderFloorPlan(
     : "";
 
   return (
+    '<p class="floor-plan-caption">' +
+    caption +
+    "</p>" +
     '<div id="floor-plan" class="floor-plan" style="aspect-ratio: ' +
     aspectRatio.toFixed(4) +
     ';">' +
@@ -636,7 +643,7 @@ ${embeddedFunctions}
     function renderCalibrationUi() {
       var venue = venuesById[currentVenueId];
       if (!venue) return;
-      document.getElementById("floor-plan-container").innerHTML = renderFloorPlan(venue, currentApNodes, markedPosition, pendingApNodePosition);
+      document.getElementById("floor-plan-container").innerHTML = renderFloorPlan(venue, currentApNodes, markedPosition, pendingApNodePosition, addingApNode);
       document.getElementById("add-ap-node-toggle").textContent = addingApNode ? "Cancel adding AP node" : "Add AP node";
       document.getElementById("ap-node-form-container").innerHTML = addingApNode ? renderApNodePlacementForm(pendingApNodePosition) : "";
       document.getElementById("calibration-form-container").innerHTML = renderCalibrationForm(currentApNodes, markedPosition);

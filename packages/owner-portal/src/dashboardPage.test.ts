@@ -145,14 +145,14 @@ const TEST_AP_NODES: ApNodeRecord[] = [
 ];
 
 test("renderFloorPlan: renders no AP-node markers when there are none, and no marked-position marker when null", () => {
-  const html = renderFloorPlan(TEST_VENUE, [], null, null);
+  const html = renderFloorPlan(TEST_VENUE, [], null, null, false);
   assert.doesNotMatch(html, /ap-node-marker/);
   assert.doesNotMatch(html, /marked-position-marker/);
   assert.doesNotMatch(html, /pending-ap-node-marker/);
 });
 
 test("renderFloorPlan: renders one marker per AP node, positioned as a percentage of floorWidth/floorHeight", () => {
-  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, null, null);
+  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, null, null, false);
   const markerCount = (html.match(/class="ap-node-marker"/g) ?? []).length;
   assert.strictEqual(markerCount, 2);
   // ap-1 is at x=2 of floorWidth=10 -> 20.00%
@@ -160,14 +160,26 @@ test("renderFloorPlan: renders one marker per AP node, positioned as a percentag
 });
 
 test("renderFloorPlan: renders the marked position as a distinct marker when present", () => {
-  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, { x: 5, y: 4 }, null);
+  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, { x: 5, y: 4 }, null, false);
   assert.match(html, /marked-position-marker/);
 });
 
 test("renderFloorPlan: renders a pending AP-node marker distinctly from the calibration mark", () => {
-  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, null, { x: 3, y: 3 });
+  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, null, { x: 3, y: 3 }, true);
   assert.match(html, /pending-ap-node-marker/);
   assert.doesNotMatch(html, /marked-position-marker/);
+});
+
+test("renderFloorPlan: shows a calibration caption when not adding an AP node", () => {
+  const html = renderFloorPlan(TEST_VENUE, [], null, null, false);
+  assert.match(html, /Click to mark a calibration position\./);
+  assert.doesNotMatch(html, /Click to place a new AP node\./);
+});
+
+test("renderFloorPlan: shows an AP-node caption when adding an AP node", () => {
+  const html = renderFloorPlan(TEST_VENUE, [], null, null, true);
+  assert.match(html, /Click to place a new AP node\./);
+  assert.doesNotMatch(html, /Click to mark a calibration position\./);
 });
 
 test("renderCalibrationForm: with zero AP nodes, shows an explicit prompt to add one first, never an empty dropdown", () => {
