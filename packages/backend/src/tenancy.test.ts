@@ -9,6 +9,7 @@ import {
   getApNodesForVenue,
   venueBelongsToOwner,
   getVenue,
+  getVenueById,
 } from "./tenancy.ts";
 
 test("createOwner/createVenue round-trip and getVenuesForOwner returns them", () => {
@@ -20,6 +21,31 @@ test("createOwner/createVenue round-trip and getVenuesForOwner returns them", ()
   assert.strictEqual(venues.length, 1);
   assert.strictEqual(venues[0]?.id, venue.id);
   assert.strictEqual(venues[0]?.name, "Test Venue");
+  db.close();
+});
+
+test("createVenue generates a real, sufficiently random hardwareToken, never blank or reused across venues", () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwner(db, "Token Test Owner");
+
+  const venueA = createVenue(db, owner.id, { name: "Venue A", floorWidth: 10, floorHeight: 8 });
+  const venueB = createVenue(db, owner.id, { name: "Venue B", floorWidth: 10, floorHeight: 8 });
+
+  assert.strictEqual(typeof venueA.hardwareToken, "string");
+  assert.ok(venueA.hardwareToken.length >= 32, "token must be long enough to resist guessing");
+  assert.notStrictEqual(venueA.hardwareToken, venueB.hardwareToken, "each venue must get its own token");
+  db.close();
+});
+
+test("getVenueById finds a venue by id alone, with no owner check - the hardware-ingestion auth path verifies the token separately", () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwner(db, "Lookup Test Owner");
+  const venue = createVenue(db, owner.id, { name: "Lookup Venue", floorWidth: 10, floorHeight: 8 });
+
+  const found = getVenueById(db, venue.id);
+  assert.ok(found);
+  assert.strictEqual(found?.hardwareToken, venue.hardwareToken);
+  assert.strictEqual(getVenueById(db, "nonexistent-venue-id"), null);
   db.close();
 });
 

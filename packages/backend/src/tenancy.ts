@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 
 export interface Owner {
   id: string;
@@ -14,6 +14,8 @@ export interface Venue {
   floorWidth: number;
   floorHeight: number;
   createdAt: number;
+  /** Doubles as the salt for hashing device MACs from hardware ingestion. Rotating it resets return-visit continuity for this venue. */
+  hardwareToken: string;
 }
 
 export interface ApNodeRecord {
@@ -39,10 +41,19 @@ export function createVenue(
 ): Venue {
   const id = randomUUID();
   const createdAt = Date.now();
+  const hardwareToken = randomBytes(32).toString("hex");
   db.prepare(
-    "INSERT INTO venues (id, owner_id, name, floor_width, floor_height, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(id, ownerId, input.name, input.floorWidth, input.floorHeight, createdAt);
-  return { id, ownerId, name: input.name, floorWidth: input.floorWidth, floorHeight: input.floorHeight, createdAt };
+    "INSERT INTO venues (id, owner_id, name, floor_width, floor_height, created_at, hardware_token) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, ownerId, input.name, input.floorWidth, input.floorHeight, createdAt, hardwareToken);
+  return {
+    id,
+    ownerId,
+    name: input.name,
+    floorWidth: input.floorWidth,
+    floorHeight: input.floorHeight,
+    createdAt,
+    hardwareToken,
+  };
 }
 
 export function createApNode(
@@ -58,7 +69,37 @@ export function createApNode(
   return { id, venueId, apNodeId: input.apNodeId, x: input.x, y: input.y, createdAt };
 }
 
-// Every read below requires tenantId in the WHERE clause. No "get all" helper exists that skips it.
+// Every read below requires tenantId in the WHERE clause, except
+// getVenueById - hardware ingestion has no owner session, so it
+// authenticates via the venue's hardwareToken instead (a real DB
+// lookup + constant-time compare at the call site, never trusting a
+// client-supplied venueId alone).
+
+/** No owner check - only for the hardware-ingestion auth path, which verifies the token separately. */
+export function getVenueById(db: DatabaseSync, venueId: string): Venue | null {
+  const row = db.prepare("SELECT * FROM venues WHERE id = ?").get(venueId) as
+    | {
+        id: string;
+        owner_id: string;
+        name: string;
+        floor_width: number;
+        floor_height: number;
+        created_at: number;
+        hardware_token: string;
+      }
+    | undefined;
+
+  if (!row) return null;
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    floorWidth: row.floor_width,
+    floorHeight: row.floor_height,
+    createdAt: row.created_at,
+    hardwareToken: row.hardware_token,
+  };
+}
 
 export function getVenuesForOwner(db: DatabaseSync, tenantId: string): Venue[] {
   const rows = db.prepare("SELECT * FROM venues WHERE owner_id = ?").all(tenantId) as Array<{
@@ -68,6 +109,7 @@ export function getVenuesForOwner(db: DatabaseSync, tenantId: string): Venue[] {
     floor_width: number;
     floor_height: number;
     created_at: number;
+    hardware_token: string;
   }>;
   return rows.map((r) => ({
     id: r.id,
@@ -76,6 +118,7 @@ export function getVenuesForOwner(db: DatabaseSync, tenantId: string): Venue[] {
     floorWidth: r.floor_width,
     floorHeight: r.floor_height,
     createdAt: r.created_at,
+    hardwareToken: r.hardware_token,
   }));
 }
 
@@ -89,6 +132,7 @@ export function getVenue(db: DatabaseSync, tenantId: string, venueId: string): V
         floor_width: number;
         floor_height: number;
         created_at: number;
+        hardware_token: string;
       }
     | undefined;
 
@@ -100,6 +144,7 @@ export function getVenue(db: DatabaseSync, tenantId: string, venueId: string): V
     floorWidth: row.floor_width,
     floorHeight: row.floor_height,
     createdAt: row.created_at,
+    hardwareToken: row.hardware_token,
   };
 }
 

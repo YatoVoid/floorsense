@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS venues (
   name TEXT NOT NULL,
   floor_width REAL NOT NULL,
   floor_height REAL NOT NULL,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  hardware_token TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS ap_nodes (

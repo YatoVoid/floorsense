@@ -7,6 +7,7 @@ export {
   getApNodesForVenue,
   venueBelongsToOwner,
   getVenue,
+  getVenueById,
 } from "./tenancy.ts";
 export type { Owner, Venue, ApNodeRecord } from "./tenancy.ts";
 export { ingestApEvent, getEventsForVenue } from "./ingest.ts";
