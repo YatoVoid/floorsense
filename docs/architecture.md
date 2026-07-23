@@ -87,5 +87,10 @@ holds - hardware never sees or computes the hash itself). Rotating a
 venue's token resets return-visit continuity for that venue, since the
 hash changes; there's no separate rotation endpoint today.
 
+Real ESP32 AP-node firmware implementing this contract lives in
+`firmware/esp32-ap-node/` (Arduino, outside the npm workspaces since
+it targets different hardware entirely). It has not been compiled or
+hardware-tested in this development environment - see its own README.
+
 See `docs/positioning-accuracy.md` for what accuracy to realistically
 expect from the calibration/trilateration this hardware feeds.
