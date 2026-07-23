@@ -8,6 +8,9 @@ import {
   recordCalibrationSample,
   computeVenueHeatmap,
   computeReturnVisitStats,
+  getOwnerTier,
+  tierAllowsHeatmap,
+  applyTierToReturnVisitStats,
 } from "@floorsense/backend";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -153,6 +156,18 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
         return;
       }
 
+      const tier = getOwnerTier(db, auth.ownerId);
+      if (!tierAllowsHeatmap(tier)) {
+        // 402 (Payment Required), not 403: this is a real, if uncommonly
+        // used, HTTP status many real APIs use for "upgrade required"
+        // scenarios — distinct from 403's "you will never be allowed"
+        // semantic, since upgrading the tier resolves this. The heatmap is
+        // never computed at all in this branch.
+        res.writeHead(402, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "upgrade required", requiredTier: "standard" }));
+        return;
+      }
+
       const heatmap = computeVenueHeatmap(db, auth.ownerId, venueId);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(heatmap));
@@ -168,7 +183,12 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
         return;
       }
 
-      const stats = computeReturnVisitStats(db, auth.ownerId, venueId);
+      // Tier is looked up fresh per request (never cached in the session
+      // token), so a tier change takes effect immediately for any
+      // already-issued session — not a perceived bug if a token's owner's
+      // access changes mid-session.
+      const tier = getOwnerTier(db, auth.ownerId);
+      const stats = applyTierToReturnVisitStats(computeReturnVisitStats(db, auth.ownerId, venueId), tier);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(stats));
       return;

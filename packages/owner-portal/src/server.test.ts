@@ -13,6 +13,7 @@ import {
   ingestApEvent,
   computeVenueHeatmap,
   computeReturnVisitStats,
+  setOwnerTier,
 } from "@floorsense/backend";
 import { createOwnerPortalServer } from "./server.ts";
 
@@ -180,6 +181,7 @@ test("GET /venues/:venueId/heatmap rejects a valid token for a different owner's
 test("GET /venues/:venueId/heatmap returns the same data computeVenueHeatmap would return directly", async () => {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "Heatmap Legit Owner", "password");
+  setOwnerTier(db, owner.id, "premium"); // heatmap access requires standard/premium (KR7)
   const venue = createVenue(db, owner.id, { name: "Heatmap Legit Venue", floorWidth: 10, floorHeight: 8 });
   const apNode = createApNode(db, venue.id, { apNodeId: "ap-1", x: 0, y: 0 });
   const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", "test-salt");
@@ -239,6 +241,7 @@ test("GET /venues/:venueId/return-visit-stats rejects a valid token for a differ
 test("GET /venues/:venueId/return-visit-stats returns the same data computeReturnVisitStats would return directly", async () => {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "Stats Legit Owner", "password");
+  setOwnerTier(db, owner.id, "premium"); // only premium returns return-visit-stats fully unredacted (KR7)
   const venue = createVenue(db, owner.id, { name: "Stats Legit Venue", floorWidth: 10, floorHeight: 8 });
   const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", "test-salt");
   recordConsentGrant(db, { tenantId: owner.id, venueId: venue.id, hashedDeviceId, termsVersion: "v1" });
@@ -269,6 +272,100 @@ test("GET /venues/:venueId/return-visit-stats returns the same data computeRetur
     assert.strictEqual(res.status, 200);
     const json = await res.json();
     assert.deepStrictEqual(json, expected);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/heatmap: a basic-tier owner is denied with 402, and the heatmap is never computed", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Basic Tier Owner", "password");
+  // No setOwnerTier call — defaults to "basic".
+  const venue = createVenue(db, owner.id, { name: "Basic Tier Venue", floorWidth: 10, floorHeight: 8 });
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/heatmap`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.strictEqual(res.status, 402);
+    const json = (await res.json()) as { error: string; requiredTier: string };
+    assert.strictEqual(json.requiredTier, "standard");
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/heatmap: a standard-tier owner is allowed", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Standard Tier Owner", "password");
+  setOwnerTier(db, owner.id, "standard");
+  const venue = createVenue(db, owner.id, { name: "Standard Tier Venue", floorWidth: 10, floorHeight: 8 });
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/heatmap`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.strictEqual(res.status, 200);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/return-visit-stats: a basic-tier owner gets real aggregate counts but empty perDevice and a zeroed hourOfDayDistribution", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Basic Stats Owner", "password");
+  // No setOwnerTier call — defaults to "basic".
+  const venue = createVenue(db, owner.id, { name: "Basic Stats Venue", floorWidth: 10, floorHeight: 8 });
+  const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", "test-salt");
+  recordConsentGrant(db, { tenantId: owner.id, venueId: venue.id, hashedDeviceId, termsVersion: "v1" });
+  ingestApEvent(db, { type: "join", hashedDeviceId, tenantId: owner.id, venueId: venue.id, apNodeId: "ap-1", timestamp: 1000 });
+  ingestApEvent(db, { type: "leave", hashedDeviceId, tenantId: owner.id, venueId: venue.id, apNodeId: "ap-1", timestamp: 4000 });
+
+  const rawStats = computeReturnVisitStats(db, owner.id, venue.id);
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/return-visit-stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.strictEqual(res.status, 200);
+    const json = (await res.json()) as {
+      perDevice: unknown[];
+      hourOfDayDistribution: number[];
+      newDeviceCount: number;
+      returningDeviceCount: number;
+      returningRatio: number;
+    };
+    assert.deepStrictEqual(json.perDevice, []);
+    assert.strictEqual(json.hourOfDayDistribution.length, 24);
+    assert.ok(json.hourOfDayDistribution.every((v) => v === 0));
+    assert.strictEqual(json.newDeviceCount, rawStats.newDeviceCount, "aggregate counts must be the real, unredacted numbers");
+    assert.strictEqual(json.returningDeviceCount, rawStats.returningDeviceCount);
+    assert.strictEqual(json.returningRatio, rawStats.returningRatio);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/return-visit-stats: a standard-tier owner gets real hourOfDayDistribution but empty perDevice", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Standard Stats Owner", "password");
+  setOwnerTier(db, owner.id, "standard");
+  const venue = createVenue(db, owner.id, { name: "Standard Stats Venue", floorWidth: 10, floorHeight: 8 });
+  const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", "test-salt");
+  recordConsentGrant(db, { tenantId: owner.id, venueId: venue.id, hashedDeviceId, termsVersion: "v1" });
+  ingestApEvent(db, { type: "join", hashedDeviceId, tenantId: owner.id, venueId: venue.id, apNodeId: "ap-1", timestamp: 1000 });
+  ingestApEvent(db, { type: "leave", hashedDeviceId, tenantId: owner.id, venueId: venue.id, apNodeId: "ap-1", timestamp: 4000 });
+
+  const rawStats = computeReturnVisitStats(db, owner.id, venue.id);
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/return-visit-stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.strictEqual(res.status, 200);
+    const json = (await res.json()) as { perDevice: unknown[]; hourOfDayDistribution: number[] };
+    assert.deepStrictEqual(json.perDevice, []);
+    assert.deepStrictEqual(json.hourOfDayDistribution, rawStats.hourOfDayDistribution);
   });
   db.close();
 });

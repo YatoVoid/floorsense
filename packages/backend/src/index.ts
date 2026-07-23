@@ -48,4 +48,6 @@ export type {
   SnapshotReading,
   Snapshot,
 } from "./heatmap.ts";
+export { setOwnerTier, getOwnerTier, tierAllowsHeatmap, applyTierToReturnVisitStats } from "./tiers.ts";
+export type { SubscriptionTier } from "./tiers.ts";
 export { seedDemoData } from "./seed.ts";

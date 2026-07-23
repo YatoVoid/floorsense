@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS owners (
   name TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   password_hash TEXT,
-  password_salt TEXT
+  password_salt TEXT,
+  tier TEXT NOT NULL DEFAULT 'basic'
 );
 
 CREATE TABLE IF NOT EXISTS owner_sessions (

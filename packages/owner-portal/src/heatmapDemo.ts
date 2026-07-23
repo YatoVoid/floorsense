@@ -9,6 +9,7 @@ import {
   ingestApEvent,
   recordCalibrationSample,
   fitCalibrationProfile,
+  setOwnerTier,
 } from "@floorsense/backend";
 import { createOwnerPortalServer } from "./server.ts";
 
@@ -39,6 +40,7 @@ export interface HeatmapDemoResult {
 export async function runHeatmapDemo(): Promise<HeatmapDemoResult> {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "Heatmap Demo Owner", "demo-password-123");
+  setOwnerTier(db, owner.id, "premium"); // heatmap access requires standard/premium (KR7)
   const venue = createVenue(db, owner.id, { name: "Heatmap Demo Venue", floorWidth: 10, floorHeight: 10 });
   const apNodes = [
     createApNode(db, venue.id, { apNodeId: "ap-1", x: 0, y: 0 }),
@@ -159,38 +161,44 @@ export async function runHeatmapDemo(): Promise<HeatmapDemoResult> {
 
   const server = createOwnerPortalServer(db);
   await new Promise<void>((resolve) => server.listen(0, resolve));
-  const address = server.address() as AddressInfo;
-  const baseUrl = `http://127.0.0.1:${address.port}`;
 
-  const loginRes = await fetch(`${baseUrl}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Heatmap Demo Owner", password: "demo-password-123" }),
-  });
-  if (!loginRes.ok) throw new Error(`login failed: ${loginRes.status}`);
-  const { token } = (await loginRes.json()) as { token: string };
+  try {
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
 
-  const heatmapRes = await fetch(`${baseUrl}/venues/${venue.id}/heatmap`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!heatmapRes.ok) throw new Error(`heatmap fetch failed: ${heatmapRes.status}`);
-  const heatmap = (await heatmapRes.json()) as { cells: Array<{ cellX: number; cellY: number; weight: number }> };
+    const loginRes = await fetch(`${baseUrl}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Heatmap Demo Owner", password: "demo-password-123" }),
+    });
+    if (!loginRes.ok) throw new Error(`login failed: ${loginRes.status}`);
+    const { token } = (await loginRes.json()) as { token: string };
 
-  const statsRes = await fetch(`${baseUrl}/venues/${venue.id}/return-visit-stats`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!statsRes.ok) throw new Error(`return-visit-stats fetch failed: ${statsRes.status}`);
-  const stats = (await statsRes.json()) as { perDevice: unknown[] };
+    const heatmapRes = await fetch(`${baseUrl}/venues/${venue.id}/heatmap`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!heatmapRes.ok) throw new Error(`heatmap fetch failed: ${heatmapRes.status}`);
+    const heatmap = (await heatmapRes.json()) as { cells: Array<{ cellX: number; cellY: number; weight: number }> };
 
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  db.close();
+    const statsRes = await fetch(`${baseUrl}/venues/${venue.id}/return-visit-stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!statsRes.ok) throw new Error(`return-visit-stats fetch failed: ${statsRes.status}`);
+    const stats = (await statsRes.json()) as { perDevice: unknown[] };
 
-  const hottest = heatmap.cells.reduce((a, b) => (b.weight > a.weight ? b : a));
-  return {
-    hottestCell: hottest,
-    totalCells: heatmap.cells.length,
-    returnVisitStatsDeviceCount: stats.perDevice.length,
-  };
+    const hottest = heatmap.cells.reduce((a, b) => (b.weight > a.weight ? b : a));
+    return {
+      hottestCell: hottest,
+      totalCells: heatmap.cells.length,
+      returnVisitStatsDeviceCount: stats.perDevice.length,
+    };
+  } finally {
+    // Ensures the server (and thus the process/test runner) is never left
+    // dangling if a fetch above throws — a real issue this task hit when
+    // the tier gate's 402 wasn't accounted for here yet.
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    db.close();
+  }
 }
 
 /** Run directly: `node src/heatmapDemo.ts` */
