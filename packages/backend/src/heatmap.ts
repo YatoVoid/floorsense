@@ -8,7 +8,7 @@ export interface HeatmapGridConfig {
   cellSizeMeters: number;
 }
 
-/** 1 meter per cell: fine enough to show seating clusters, coarse enough that a typical venue floor doesn't produce an enormous grid. */
+/** 1 meter per cell, fine enough to show seating clusters without an enormous grid. */
 export const DEFAULT_HEATMAP_CONFIG: HeatmapGridConfig = { cellSizeMeters: 1 };
 
 export interface HeatmapCell {
@@ -34,17 +34,7 @@ function clampCellIndex(index: number, gridSize: number): number {
   return Math.min(Math.max(index, 0), gridSize - 1);
 }
 
-/**
- * Buckets weighted position estimates into a venue-level grid — a "most
- * sat at" spatial map summed across ALL devices per cell, not one device's
- * individual path. Pure, independently testable without a live DB (same
- * split as estimateDevicePosition/positioning.ts).
- *
- * Grid dimensions round UP (ceil) when floorWidth/floorHeight aren't a
- * clean multiple of cellSizeMeters, so the whole floor is always covered;
- * the final row/column simply represents a smaller physical area than a
- * full cell, an acceptable approximation for a heatmap.
- */
+/** Buckets weighted position estimates into a venue-level grid, summed across all devices per cell. Grid size rounds up so the whole floor is always covered. */
 export function buildHeatmapFromEstimates(
   estimates: WeightedPositionEstimate[],
   floorWidth: number,
@@ -81,15 +71,7 @@ export interface Snapshot {
   readings: SnapshotReading[];
 }
 
-/**
- * Groups a device's signal_reading rows (already sorted by timestamp) into
- * snapshots: readings sharing the exact same timestamp are treated as one
- * "moment in time" (the simulator, and a real AP's reporting cycle, emit
- * all of a device's per-AP-node readings for one sampling instant with the
- * same timestamp). Known simplification for the simulated/local-dev
- * pipeline — a real deployment with per-AP-node reporting jitter might
- * need a small time-window tolerance instead of an exact match.
- */
+/** Groups a device's signal_reading rows (sorted by timestamp) into snapshots: same-timestamp readings are one moment in time. */
 export function groupIntoSnapshots(rows: Array<{ ap_node_id: string; rssi: number; timestamp: number }>): Snapshot[] {
   const snapshots: Snapshot[] = [];
   for (const row of rows) {
@@ -103,16 +85,7 @@ export function groupIntoSnapshots(rows: Array<{ ap_node_id: string; rssi: numbe
   return snapshots;
 }
 
-/**
- * Converts one device's ordered snapshots into weighted position
- * estimates: each snapshot's weight is the time until its successor,
- * capped at SESSION_GAP_MS; a snapshot with no successor (the device's
- * last, or only, snapshot in the given window) receives the cap itself
- * rather than zero — a real, confirmed sighting should never contribute
- * nothing merely because it was the most recent one in the queried data.
- * No-data estimates are excluded; weighted-centroid estimates (1-2 AP
- * nodes) are included as real, if lower-confidence, signal.
- */
+/** Weight = time until the next snapshot, capped at SESSION_GAP_MS. The last snapshot gets the cap, not zero. No-data estimates are dropped. */
 export function computeWeightedEstimatesForDevice(
   snapshots: Snapshot[],
   apNodePositions: ApNodePosition[],
@@ -136,24 +109,7 @@ export function computeWeightedEstimatesForDevice(
   return estimates;
 }
 
-/**
- * Computes a venue-wide, dwell-time-weighted heatmap from every device's
- * full signal_reading history — extending estimateCurrentPosition's
- * "latest reading only" view into a historical time series per device.
- *
- * Each snapshot's weight is the time until that device's next snapshot,
- * capped at SESSION_GAP_MS (reused from returnVisits.ts) so one stale or
- * final reading can't dominate a cell. A device's last (or only) snapshot
- * — with no subsequent reading to bound it — receives the cap itself
- * (SESSION_GAP_MS), not zero: a real, confirmed sighting should never
- * contribute nothing just because it happened to be the most recent one
- * seen in the queried data.
- *
- * Weighted-centroid estimates (1-2 AP nodes) are included — real, if
- * lower-confidence, signal; a heatmap that discarded them would bias
- * toward areas/times with good AP-node geometry. No-data estimates (0 AP
- * nodes) contribute nothing.
- */
+/** Dwell-time-weighted heatmap built from every device's full signal_reading history for this venue. */
 export function computeVenueHeatmap(
   db: DatabaseSync,
   tenantId: string,

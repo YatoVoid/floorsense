@@ -8,11 +8,7 @@ export interface ConsentGrant {
   termsVersion: string;
 }
 
-/**
- * Records (or renews) consent for a device at a venue. Re-granting the same
- * (tenant, venue, device) triple updates acceptedAt/termsVersion in place —
- * consent_grants holds one row per device per venue, not a full history.
- */
+/** Re-granting the same (tenant, venue, device) triple updates the existing row instead of adding a new one. */
 export function recordConsentGrant(
   db: DatabaseSync,
   input: { tenantId: string; venueId: string; hashedDeviceId: string; termsVersion: string }

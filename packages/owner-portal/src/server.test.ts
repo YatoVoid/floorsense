@@ -76,7 +76,7 @@ test("POST /auth/login: unknown owner and wrong password produce byte-identical 
 
     assert.strictEqual(wrongPasswordRes.status, unknownOwnerRes.status);
     const [wrongBody, unknownBody] = await Promise.all([wrongPasswordRes.text(), unknownOwnerRes.text()]);
-    assert.strictEqual(wrongBody, unknownBody, "the two failure responses must be byte-identical — no information leak");
+    assert.strictEqual(wrongBody, unknownBody, "the two failure responses must be byte-identical");
   });
   db.close();
 });
@@ -254,7 +254,7 @@ test("GET /venues/:venueId/ap-nodes rejects a valid token for a different owner'
 test("GET /venues/:venueId/ap-nodes returns the real AP node list for the legitimate owner, unaffected by tier", async () => {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "AP Nodes Legit Owner", "password");
-  setOwnerTier(db, owner.id, "basic"); // deliberately basic — this route must not be tier-gated
+  setOwnerTier(db, owner.id, "basic"); // basic tier on purpose: this route should not be gated
   const venue = createVenue(db, owner.id, { name: "AP Nodes Legit Venue", floorWidth: 10, floorHeight: 8 });
   createApNode(db, venue.id, { apNodeId: "ap-1", x: 1, y: 2 });
   createApNode(db, venue.id, { apNodeId: "ap-2", x: 8, y: 6 });
@@ -485,7 +485,7 @@ test("GET /venues/:venueId/return-visit-stats returns the same data computeRetur
 test("GET /venues/:venueId/heatmap: a basic-tier owner is denied with 402, and the heatmap is never computed", async () => {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "Basic Tier Owner", "password");
-  // No setOwnerTier call — defaults to "basic".
+  // no setOwnerTier call, defaults to basic
   const venue = createVenue(db, owner.id, { name: "Basic Tier Venue", floorWidth: 10, floorHeight: 8 });
   const token = createSession(db, owner.id, Date.now(), 60_000);
 
@@ -519,7 +519,7 @@ test("GET /venues/:venueId/heatmap: a standard-tier owner is allowed", async () 
 test("GET /venues/:venueId/return-visit-stats: a basic-tier owner gets real aggregate counts but empty perDevice and a zeroed hourOfDayDistribution", async () => {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "Basic Stats Owner", "password");
-  // No setOwnerTier call — defaults to "basic".
+  // no setOwnerTier call, defaults to basic
   const venue = createVenue(db, owner.id, { name: "Basic Stats Venue", floorWidth: 10, floorHeight: 8 });
   const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", "test-salt");
   recordConsentGrant(db, { tenantId: owner.id, venueId: venue.id, hashedDeviceId, termsVersion: "v1" });

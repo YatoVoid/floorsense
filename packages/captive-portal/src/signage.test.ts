@@ -22,7 +22,7 @@ test("signage page uses print-friendly CSS", () => {
   assert.match(html, /@media print/);
 });
 
-test("signage consent copy matches getDisclosure exactly — no independently-drifting duplicate prose", () => {
+test("signage consent copy matches getDisclosure exactly, no duplicate prose drifting out of sync", () => {
   const venueName = "Test Cafe";
   const html = renderSignagePage({ venueName, ssidName: "Test-Guest-WiFi", portalUrl: "http://10.0.0.1:8080/" });
   const disclosure = getDisclosure(venueName);

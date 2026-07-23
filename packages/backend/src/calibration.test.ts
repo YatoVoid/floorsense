@@ -107,8 +107,7 @@ test("calibration is tenant-isolated: owner A's samples and fitted profile never
   assert.ok(fittedA);
   assert.ok(Math.abs(fittedA.referenceRssiAt1m - groundTruthA.referenceRssiAt1m) < 1e-6);
 
-  // Owner B has recorded no samples at all — must get the default, never owner A's fit,
-  // even though both venues happen to use the identical ap-node id "ap-1".
+  // Owner B has no samples, so this must be the default, not owner A's fit (both venues use ap-node id "ap-1").
   const profileB = getCalibrationProfile(db, ownerB.id, venueB.id);
   assert.deepStrictEqual(profileB, DEFAULT_CALIBRATION_PROFILE);
 

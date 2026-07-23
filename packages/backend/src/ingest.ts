@@ -17,14 +17,7 @@ export type IngestResult =
   | { accepted: true }
   | { accepted: false; reason: "invalid_event" | "no_consent" };
 
-/**
- * Persists a single ApEvent — but only for a device that already has a
- * consent_grants row for this tenant/venue. This is the structural
- * enforcement point for the "no session without consent" invariant: every
- * event type (join/leave/signal_reading) is gated here, not just join, so a
- * device can never be tracked in any form before it has gone through the
- * captive portal's accept step.
- */
+/** Only stores an event if the device already has a consent_grants row for this tenant/venue. Every event type is gated, not just join. */
 export function ingestApEvent(db: DatabaseSync, event: unknown): IngestResult {
   if (!isValidApEvent(event)) return { accepted: false, reason: "invalid_event" };
 
@@ -40,10 +33,7 @@ export function ingestApEvent(db: DatabaseSync, event: unknown): IngestResult {
   return { accepted: true };
 }
 
-/**
- * Tenant-scoped read of events for a venue — tenantId is required, so a
- * cross-tenant read is not reachable through this function.
- */
+/** Tenant-scoped read; tenantId is required so a cross-tenant read isn't possible here. */
 export function getEventsForVenue(db: DatabaseSync, tenantId: string, venueId: string): StoredApEvent[] {
   const rows = db
     .prepare(

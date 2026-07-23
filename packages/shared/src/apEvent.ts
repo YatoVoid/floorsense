@@ -25,11 +25,7 @@ export type ApEvent = JoinEvent | LeaveEvent | SignalReadingEvent;
 
 const AP_EVENT_TYPES = new Set(["join", "leave", "signal_reading"]);
 
-/**
- * Runtime shape check for an ApEvent. Used at package boundaries (adapter
- * output, backend ingest) where a value's shape isn't statically known —
- * e.g. after deserializing from a queue or a network message.
- */
+/** Runtime shape check, used wherever an event's shape isn't statically known (e.g. after JSON parsing). */
 export function isValidApEvent(value: unknown): value is ApEvent {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;

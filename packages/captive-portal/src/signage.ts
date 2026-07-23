@@ -7,12 +7,7 @@ export interface SignageInput {
   portalUrl: string;
 }
 
-/**
- * Renders the printable physical signage page. Pulls its consent copy from
- * the same getDisclosure() the splash page uses (splashPage.ts) so the two
- * can never independently drift into inconsistent wording — this is a
- * generated artifact, not hand-copied prose.
- */
+/** Printable signage page. Shares getDisclosure() with the splash page so the wording never drifts apart. */
 export function renderSignagePage(input: SignageInput): string {
   const disclosure = getDisclosure(input.venueName);
   const listItems = (items: string[]) => items.map((item) => `<li>${escapeHtml(item)}</li>`).join("\n        ");
@@ -57,7 +52,7 @@ export function renderSignagePage(input: SignageInput): string {
 </html>`;
 }
 
-/** Run directly: `node src/signage.ts` — generates the deploy/signage/notice.html deliverable. */
+/** Run directly: `node src/signage.ts` (writes deploy/signage/notice.html) */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { writeFileSync, mkdirSync } = await import("node:fs");
   const { dirname, join } = await import("node:path");

@@ -1,8 +1,4 @@
-/**
- * The single source of consent-disclosure copy, shared by the splash page
- * (server.ts) and the printable signage deliverable, so the two never
- * drift into inconsistent wording about what is and isn't collected.
- */
+/** Shared by the splash page and the signage page so wording stays in sync. */
 export interface Disclosure {
   title: string;
   intro: string;

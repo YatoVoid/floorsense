@@ -68,21 +68,10 @@ function weightedCentroid(matched: MatchedReading[]): Point {
 }
 
 const SINGULARITY_EPSILON = 1e-9;
-/** How close to 1 the squared-cosine-of-angle ratio can get before the anchor layout is treated as too collinear to trust. */
+/** Collinearity guard: near 1 means the anchors barely span 2D space. */
 const COLLINEARITY_THRESHOLD = 1 - 1e-6;
 
-/**
- * Linear-least-squares multilateration: subtracts a reference anchor's
- * circle equation from every other anchor's to linearize, then solves the
- * resulting 2-unknown normal equations via Cramer's rule.
- *
- * Returns null (rather than NaN/Infinity from a near-singular solve) when
- * the anchor layout is too close to collinear: ata01^2/(ata00*ata11) is the
- * squared cosine of the angle between the two linearized equations'
- * coefficient directions, scale-invariant regardless of the venue's actual
- * coordinate units — as it approaches 1, the anchors don't meaningfully
- * span 2D space and the solve becomes unreliable.
- */
+/** Linearized least-squares multilateration (subtract one anchor's circle equation from the rest, solve via Cramer's rule). Returns null instead of NaN/Infinity for a near-collinear anchor layout. */
 function trilaterate(matched: MatchedReading[]): Point | null {
   const ref = matched[0];
   if (!ref) return null;
@@ -120,14 +109,7 @@ function trilaterate(matched: MatchedReading[]): Point | null {
   return { x, y };
 }
 
-/**
- * Estimates a device's (x, y) position from RSSI readings against known
- * AP node positions. Trilaterates when >=3 AP nodes reported (falling back
- * to a weighted centroid if that anchor layout is too collinear to solve
- * reliably); uses a weighted centroid directly for 1-2 AP nodes; returns
- * an explicit "no-data" result for 0 matched readings rather than a
- * fabricated position.
- */
+/** Trilaterates with 3+ AP nodes (falls back to weighted centroid if collinear), weighted centroid with 1-2, "no-data" with 0. */
 export function estimateDevicePosition(
   readings: RssiReading[],
   apNodePositions: ApNodePosition[],

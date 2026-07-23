@@ -26,13 +26,7 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-/**
- * Creates the captive-portal HTTP server for a single venue. tenantId and
- * venueId are fixed at server-creation time (not client-supplied) — a
- * device connecting to this portal can only ever grant consent for the
- * venue this portal instance actually serves, not an arbitrary one it
- * names in a request.
- */
+/** tenantId/venueId are fixed at creation time, so a device can only grant consent for the venue this portal actually serves. */
 export function createCaptivePortalServer(db: DatabaseSync, config: CaptivePortalConfig): Server {
   return createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");

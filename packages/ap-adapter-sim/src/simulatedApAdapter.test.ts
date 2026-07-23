@@ -162,14 +162,7 @@ test("signal_reading events include one entry per configured AP node per tick wh
   assert.strictEqual(signalReadings.length, 4 * apNodes.length, "expected apNodes.length signal readings per joined tick");
 });
 
-// The full-simulation approach (place two AP nodes "near" and "far", run the
-// sim, compare average RSSI) is unreliable as a test: a device's join
-// position is randomly chosen, so with a short run the random walk may never
-// actually put the device closer to the intended "near" node than "far" for
-// the sampled duration -- that isn't a bug in the model, it's the test
-// assuming a spawn location it never controlled. Testing the underlying
-// formula directly, with noise held constant, is a precise and
-// deterministic proof of the same property instead.
+// Testing the formula directly avoids relying on a device's randomly-chosen join position.
 test("pathLossRssi weakens (more negative) as distance increases, holding noise constant", () => {
   const near = pathLossRssi(1, NO_NOISE);
   const mid = pathLossRssi(5, NO_NOISE);

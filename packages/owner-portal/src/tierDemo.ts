@@ -26,15 +26,7 @@ export interface TierDemoResult {
   premium: TierResult;
 }
 
-/**
- * End-to-end proof that the tier gate (KR7) produces real HTTP status/body
- * differences, not just unit-level redaction correctness (already covered
- * by tiers.test.ts). Three owners, each with their OWN venue but carrying
- * IDENTICAL underlying event data (same AP layout, same join/signal_reading/
- * leave events for one device) — separate tenants so real multi-tenant
- * isolation applies, but comparable data so the only difference in the
- * responses is attributable to tier, not to different underlying activity.
- */
+/** Three owners, each with a venue carrying identical event data, checked over real HTTP for real per-tier response differences. */
 export async function runTierDemo(): Promise<TierDemoResult> {
   const db = openDatabase(":memory:");
 

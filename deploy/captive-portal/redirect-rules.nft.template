@@ -1,20 +1,19 @@
 #!/usr/sbin/nft -f
-# FloorSense captive-portal AP — traffic redirect rules (nftables)
+# FloorSense captive-portal AP: traffic redirect rules (nftables)
 #
-# TEMPLATE ONLY. Applying this to a real interface's live ruleset is a
-# manual operator action — never run automatically by any code in this
-# repository. See README.md in this directory for the full flow and for
-# how devices move from "held" to "allowed" after consent.
+# TEMPLATE ONLY. Applying this to a real interface is a manual operator
+# action, never run automatically by anything in this repository. See
+# README.md in this directory for the full flow.
 #
 # Placeholders to replace before use:
-#   <AP_IP>         e.g. 10.90.0.1 — the AP's own address, where the
-#                   @floorsense/captive-portal HTTP server listens
-#   <PORTAL_PORT>   e.g. 8080 — the captive-portal server's port
+#   <AP_IP>         e.g. 10.90.0.1, the AP's own address, where
+#                   @floorsense/captive-portal listens
+#   <PORTAL_PORT>   e.g. 8080, the captive-portal server's port
 #
-# Effect: any device NOT in the allowed_devices set has its outbound
-# HTTP/HTTPS traffic redirected to the captive-portal server instead of
-# the real internet. A device is added to allowed_devices only after its
-# POST /consent/accept call succeeds.
+# Effect: any device not in the allowed_devices set gets its outbound
+# HTTP/HTTPS traffic redirected to the captive-portal server. A device
+# is added to allowed_devices only after its POST /consent/accept call
+# succeeds.
 
 table inet floorsense_captive_portal {
   set allowed_devices {
@@ -29,22 +28,19 @@ table inet floorsense_captive_portal {
   }
 }
 
-# Note on allowed_devices and the "no raw MAC" invariant:
+# Note on allowed_devices and the no-raw-MAC rule:
 #
-# This set holds link-layer (MAC) addresses because that is the only
-# identifier nftables' prerouting hook can match on at this layer — the
-# same way any home router's DHCP/ARP tables inherently know connected
-# devices' MAC addresses simply by virtue of running IP networking. This
-# is kernel-level, transient, AP-local network state, not a FloorSense
-# application record.
+# This set holds MAC addresses because that's the only thing nftables'
+# prerouting hook can match on at this layer, the same way any home
+# router's DHCP/ARP tables already know connected devices' MACs just by
+# running IP networking. This is kernel-level, transient, AP-local
+# state, not a FloorSense application record.
 #
-# FloorSense's application layer (consent_grants, ap_events) never stores
-# or receives a raw MAC address — it only ever sees the salted SHA-256
-# hash produced by hashDeviceId(). The (not-yet-built) glue step that adds
-# a device to this set after a successful /consent/accept call must hash
-# the requester's MAC the same way and match it against the hashed device
-# id in the request, never persist the raw MAC anywhere outside this
-# kernel-level set, and remove it again once the device disconnects. That
-# glue script is real-deployment integration work, intentionally out of
-# scope for this proof-of-concept — building or running it against a live
-# interface is explicitly excluded from this repository's automated work.
+# FloorSense's application layer (consent_grants, ap_events) never
+# stores or receives a raw MAC. It only sees the salted hash from
+# hashDeviceId(). The glue step that adds a device to this set after a
+# successful /consent/accept call (not built yet) must hash the
+# requester's MAC the same way, match it against the request, never
+# persist the raw MAC anywhere outside this kernel set, and remove it
+# again on disconnect. That's real-deployment integration work, out of
+# scope here.

@@ -261,9 +261,6 @@ test("renderDashboardPage: produces a page with login form markup, a register to
   assert.match(scriptBody, /function renderVenueCreationForm/);
   assert.match(scriptBody, /function buildVenueCreationPayload/);
 
-  // A SyntaxError here would mean the embedded page JS is broken — this
-  // only parses the source (function bodies aren't executed by
-  // construction alone), so document/localStorage/fetch not existing in
-  // Node is not a problem for this check.
+  // Just parses the source, doesn't run it, so missing browser globals are fine here.
   assert.doesNotThrow(() => new Function(scriptBody), "the embedded page script must be syntactically valid JS");
 });

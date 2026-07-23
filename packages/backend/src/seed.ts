@@ -4,7 +4,7 @@ import { createOwner, createVenue, createApNode, getVenuesForOwner } from "./ten
 const DEMO_OWNERS = [
   {
     ownerName: "Demo Cafe Owner",
-    venueName: "Demo Cafe — Main Floor",
+    venueName: "Demo Cafe Main Floor",
     floorWidth: 20,
     floorHeight: 15,
     apNodes: [
@@ -15,7 +15,7 @@ const DEMO_OWNERS = [
   },
   {
     ownerName: "Demo Restaurant Owner",
-    venueName: "Demo Restaurant — Dining Room",
+    venueName: "Demo Restaurant Dining Room",
     floorWidth: 25,
     floorHeight: 18,
     apNodes: [
@@ -25,11 +25,7 @@ const DEMO_OWNERS = [
   },
 ];
 
-/**
- * Idempotent: re-running against the same database does not duplicate
- * owners/venues. Idempotency is keyed on owner name, which is good enough
- * for a fixed, small seed script (not a general "find or create" utility).
- */
+/** Idempotent: re-running won't duplicate owners/venues (keyed on owner name). */
 export function seedDemoData(db: DatabaseSync): void {
   const existingOwners = db.prepare("SELECT id, name FROM owners").all() as Array<{ id: string; name: string }>;
   const existingNames = new Set(existingOwners.map((o) => o.name));

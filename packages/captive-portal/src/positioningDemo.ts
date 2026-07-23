@@ -12,9 +12,7 @@ import {
 import { createCaptivePortalServer } from "./server.ts";
 import { wireAdapterThroughPortal } from "./demo.ts";
 
-/** Zero-noise random source: (random()+random()-1)*STDDEV becomes exactly 0, and
- * position-jitter terms (random()-0.5)*k become exactly 0 too — makes the whole
- * round trip deterministic so this is an exact proof, not a statistical one. */
+/** Fixed at 0.5 so both the noise term and position jitter cancel to exactly 0, giving an exact result to check instead of a statistical one. */
 const NO_NOISE = () => 0.5;
 
 export interface PositioningDemoResult {
@@ -23,18 +21,7 @@ export interface PositioningDemoResult {
   distanceError: number;
 }
 
-/**
- * End-to-end proof that the positioning pipeline (KR3) actually recovers a
- * position close to the simulator's real ground truth, going through the
- * real consent flow (KR2) rather than a shortcut around it: calibrates a
- * venue from synthetic samples generated with the exact same noiseless
- * path-loss formula the simulator uses internally, runs a real
- * SimulatedApAdapter device through wireAdapterThroughPortal's real
- * splash-page/accept HTTP round trip, then calls estimateCurrentPosition
- * and compares the result against the adapter's own
- * getGroundTruthPositions() — data no real deployment's position-estimation
- * code could ever see directly, used here purely to verify the estimate.
- */
+/** Runs a simulated device through the real consent flow and checks the recovered position against the simulator's own ground truth. */
 export async function runPositioningDemo(): Promise<PositioningDemoResult> {
   const db = openDatabase(":memory:");
   const owner = createOwner(db, "Positioning Demo Owner");

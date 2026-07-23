@@ -148,10 +148,7 @@ test("computeVenueHeatmap: a concentrated device produces a populated grid with 
   const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", "test-salt");
   recordConsentGrant(db, { tenantId, venueId, hashedDeviceId, termsVersion: "v1" });
 
-  // Deliberately not on an integer cell boundary — a boundary point risks a
-  // tiny floating-point trilateration residual flipping which cell it floors
-  // into (e.g. 4.999999999 vs 5.0), which is a test-fragility issue, not a
-  // correctness one; a mid-cell point is robust to that residual.
+  // Not on an integer cell boundary, so a tiny floating-point residual can't flip which cell it floors into.
   const truth = { x: 5.5, y: 3.5 };
   let timestamp = 1000;
   for (let i = 0; i < 3; i++) {

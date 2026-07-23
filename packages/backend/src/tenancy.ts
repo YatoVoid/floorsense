@@ -58,12 +58,7 @@ export function createApNode(
   return { id, venueId, apNodeId: input.apNodeId, x: input.x, y: input.y, createdAt };
 }
 
-/**
- * Every read below takes `tenantId` as a required first parameter and uses
- * it in the WHERE clause. There is deliberately no "get all venues" /
- * "get all events" helper that omits it — a cross-tenant read requires
- * writing new code, not just forgetting to pass an argument.
- */
+// Every read below requires tenantId in the WHERE clause. No "get all" helper exists that skips it.
 
 export function getVenuesForOwner(db: DatabaseSync, tenantId: string): Venue[] {
   const rows = db.prepare("SELECT * FROM venues WHERE owner_id = ?").all(tenantId) as Array<{
@@ -84,7 +79,7 @@ export function getVenuesForOwner(db: DatabaseSync, tenantId: string): Venue[] {
   }));
 }
 
-/** Tenant-scoped single-venue lookup — null for a nonexistent venue or one owned by someone else. */
+/** Null for a nonexistent venue or one owned by someone else. */
 export function getVenue(db: DatabaseSync, tenantId: string, venueId: string): Venue | null {
   const row = db.prepare("SELECT * FROM venues WHERE id = ? AND owner_id = ?").get(venueId, tenantId) as
     | {
@@ -133,7 +128,7 @@ export function getApNodesForVenue(db: DatabaseSync, tenantId: string, venueId: 
   }));
 }
 
-/** Real DB-level ownership check — never trust a client's claim that it owns a given venueId. */
+/** Real DB check, never trust a client's claim of owning a venueId. */
 export function venueBelongsToOwner(db: DatabaseSync, tenantId: string, venueId: string): boolean {
   const row = db.prepare("SELECT 1 FROM venues WHERE id = ? AND owner_id = ?").get(venueId, tenantId);
   return row !== undefined;

@@ -16,18 +16,11 @@ export interface WireAdapterOptions {
 
 export interface WiredAdapter {
   stats: PortalWiringStats;
-  /** Awaits every consent flow currently in flight. Call after ticking the adapter. */
+  /** Waits for any consent flows still in flight. Call after ticking the adapter. */
   drain: () => Promise<void>;
 }
 
-/**
- * Wires a SimulatedApAdapter's emitted events through the captive portal's
- * real HTTP consent flow before any of them reach ingestApEvent. A device's
- * events are buffered — never dropped, never ingested early — until its
- * simulated "saw the splash page and tapped accept" round trip resolves,
- * mirroring how a real AP holds a device's traffic pre-consent rather than
- * letting it through provisionally.
- */
+/** Buffers a device's events until its consent flow resolves, then feeds them to ingestApEvent. */
 export function wireAdapterThroughPortal(
   db: DatabaseSync,
   adapter: SimulatedApAdapter,
@@ -84,7 +77,7 @@ export function wireAdapterThroughPortal(
   };
 }
 
-/** Run directly: `node src/demo.ts` — a local, hardware-free end-to-end proof. */
+/** Run directly: `node src/demo.ts` */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { openDatabase, createOwner, createVenue, createApNode } = await import("@floorsense/backend");
   const { SimulatedApAdapter } = await import("@floorsense/ap-adapter-sim");

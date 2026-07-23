@@ -23,20 +23,7 @@ export interface SessionsDemoResult {
   visitCount: number;
 }
 
-/**
- * End-to-end proof that session reconstruction and return-visit
- * classification (KR4) actually work against a real simulated device
- * going through the real consent flow (KR2), not a shortcut around it.
- *
- * Uses SimulatedApAdapter's injectable `now` clock (added for this KR) to
- * simulate a real SESSION_GAP_MS-exceeding gap between two visits without
- * waiting in real time: the device joins and leaves once (visit 1), the
- * simulated clock is then jumped far forward, and the same device
- * (same salt + rawId => same hashedDeviceId) joins and leaves again
- * (visit 2). Ground truth (join/leave counts) is collected by an
- * independent event listener, never by re-deriving reconstructSessions's
- * own pairing logic.
- */
+/** Runs a simulated device through two visits (using the adapter's injectable clock to skip past SESSION_GAP_MS) and checks session/return-visit reconstruction against an independently counted join/leave total. */
 export async function runSessionsDemo(): Promise<SessionsDemoResult> {
   const db = openDatabase(":memory:");
   const owner = createOwner(db, "Sessions Demo Owner");
@@ -78,17 +65,16 @@ export async function runSessionsDemo(): Promise<SessionsDemoResult> {
 
   const { drain } = wireAdapterThroughPortal(db, adapter, { portalBaseUrl, termsVersion: "v1" });
 
-  // Visit 1: join, then leave (meanDwellTicks=2 + NO_NOISE deterministically
-  // yields a 1-tick dwell before leaving — see simulatedApAdapter.test.ts).
+  // Visit 1: join then leave.
   adapter.tick();
   currentTime += 1000;
   adapter.tick();
   await drain();
 
-  // Jump the clock far forward — a real gap, not a coincidence of tick timing.
+  // Jump the clock so visit 2 counts as a real gap, not just a later tick.
   currentTime += SESSION_GAP_MS + 60_000;
 
-  // Visit 2: the same device (same salt+rawId => same hashedDeviceId) rejoins, then leaves.
+  // Visit 2: same device rejoins, then leaves.
   adapter.tick();
   currentTime += 1000;
   adapter.tick();

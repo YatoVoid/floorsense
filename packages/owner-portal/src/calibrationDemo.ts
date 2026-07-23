@@ -17,16 +17,7 @@ export interface CalibrationDemoResult {
   samplesSubmitted: number;
 }
 
-/**
- * End-to-end proof that the login -> authenticated write -> existing
- * backend logic path (KR5) actually works: logs in over real HTTP,
- * submits several calibration samples over real HTTP using the returned
- * session token, then confirms fitCalibrationProfile (KR3) successfully
- * fits a profile from them — not from a coincidental match with the
- * default profile (samples are generated from the same ground-truth
- * constants the default happens to share, but fitCalibrationProfile is
- * still required to return non-null, proving a real fit occurred).
- */
+/** Logs in over real HTTP, submits calibration samples, and checks fitCalibrationProfile picks them up. */
 export async function runCalibrationDemo(): Promise<CalibrationDemoResult> {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "Calibration Demo Owner", "demo-password-123");

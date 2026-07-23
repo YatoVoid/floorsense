@@ -18,7 +18,7 @@ export interface SimulatedApAdapterConfig {
   tickIntervalMs?: number;
   /** Injectable PRNG (0..1, like Math.random) so tests can be deterministic. */
   random?: () => number;
-  /** Injectable clock (ms epoch, like Date.now) so event timestamps can be controlled — e.g. to simulate a real gap between visits without waiting in real time. */
+  /** Injectable clock (ms epoch, like Date.now), so tests can simulate a time gap without waiting. */
   now?: () => number;
   /** Average dwell time in ticks before a joined device leaves. */
   meanDwellTicks?: number;
@@ -42,14 +42,7 @@ const REFERENCE_RSSI_AT_1M = -40;
 const PATH_LOSS_EXPONENT = 2.7;
 const RSSI_NOISE_STDDEV = 3;
 
-/**
- * Log-distance path-loss model: signal weakens (more negative RSSI) as
- * distance grows. Exported for direct, deterministic unit testing —
- * verifying this in isolation is far more reliable than inferring it from
- * a full simulation run, where a device's randomly-chosen position can
- * make "near"/"far" AP labels not actually correspond to real distance
- * for the duration of a short test.
- */
+/** Log-distance path-loss model: RSSI weakens as distance grows. Exported so tests can check it directly. */
 export function pathLossRssi(distanceMeters: number, random: () => number): number {
   const dist = Math.max(distanceMeters, 0.1);
   const meanRssi = REFERENCE_RSSI_AT_1M - 10 * PATH_LOSS_EXPONENT * Math.log10(dist);
@@ -195,13 +188,7 @@ export class SimulatedApAdapter extends EventEmitter {
     this.emit("event", event);
   }
 
-  /**
-   * Testing/verification-only accessor: exposes each simulated device's true
-   * current position, so tests can check that position-estimation code
-   * (which only ever sees RSSI via emitted events) recovers something close
-   * to the truth. Never exposes rawId — only the already-hashed id, same as
-   * every emitted event — this is not a new raw-identifier path.
-   */
+  /** Test-only: exposes each device's true position (hashed id only, never rawId), to check position estimates against ground truth. */
   getGroundTruthPositions(): Array<{ hashedDeviceId: HashedDeviceId; x: number; y: number; joined: boolean }> {
     return this.devices.map((d) => ({ hashedDeviceId: d.hashedId, x: d.x, y: d.y, joined: d.joined }));
   }

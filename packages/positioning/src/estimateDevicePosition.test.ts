@@ -9,7 +9,7 @@ import {
 
 const PROFILE: CalibrationProfile = { referenceRssiAt1m: -40, pathLossExponent: 2.7 };
 
-/** Noiseless inverse of rssiToDistance — generates synthetic ground-truth RSSI for known distances. */
+/** Noiseless inverse of rssiToDistance, for synthetic ground-truth RSSI. */
 function rssiAtDistance(distance: number, profile: CalibrationProfile): number {
   return profile.referenceRssiAt1m - 10 * profile.pathLossExponent * Math.log10(Math.max(distance, 0.1));
 }
@@ -80,9 +80,7 @@ test("zero matched readings returns an explicit no-data result, not a fabricated
 });
 
 test("an exactly-collinear 3-AP-node layout falls back to weighted-centroid instead of NaN/Infinity", () => {
-  // All three AP nodes lie on the x-axis: the linearized system's y-coefficients
-  // are all exactly zero, so the normal equations are truly singular (not just
-  // ill-conditioned) — this is the case a determinant-based solve must detect.
+  // All three AP nodes on the x-axis makes the normal equations singular.
   const apNodes: ApNodePosition[] = [
     { apNodeId: "ap-1", x: 0, y: 0 },
     { apNodeId: "ap-2", x: 5, y: 0 },

@@ -3,13 +3,8 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Resolved relative to this module's own location, not the process's
-// current working directory — a relative path like "packages/backend/data/..."
-// would silently resolve to the wrong place depending on where the process
-// was launched from (verified: running `node src/seed.ts` from inside
-// packages/backend itself, a natural way to invoke it, produced a
-// doubly-nested packages/backend/packages/backend/data/ directory before
-// this fix).
+// Resolved from this module's own location so the path is correct
+// regardless of the process's working directory.
 const PACKAGE_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 export const DEFAULT_DB_PATH = join(PACKAGE_ROOT, "data", "floorsense.sqlite");
 
@@ -101,11 +96,7 @@ CREATE TABLE IF NOT EXISTS venue_calibration_profiles (
 );
 `;
 
-/**
- * Opens (creating if necessary) the FloorSense SQLite database and applies
- * schema migrations. Safe to call repeatedly — every statement is
- * CREATE TABLE/INDEX IF NOT EXISTS.
- */
+/** Safe to call repeatedly, every statement is CREATE IF NOT EXISTS. */
 export function openDatabase(path: string = DEFAULT_DB_PATH): DatabaseSync {
   if (path !== ":memory:") {
     mkdirSync(dirname(path), { recursive: true });

@@ -18,16 +18,7 @@ export interface DashboardDemoResult {
   basicOwner: { venueCount: number; heatmapStatus: number; statsPerDeviceCount: number };
 }
 
-/**
- * End-to-end proof of the exact JSON/HTML contracts the dashboard page's
- * client script (dashboardPage.ts) depends on: GET / serves real HTML;
- * GET /venues, GET /venues/:id/heatmap, and GET /venues/:id/return-visit-stats
- * all behave as the page's fetch calls assume, for both a heatmap-allowed
- * (premium) owner and a Basic owner. This is the data-contract proof —
- * it does not open the page in an actual browser (no headless-browser
- * dependency is introduced in this repo); that remains a manual
- * smoke-check step, stated explicitly, not implied to be covered here.
- */
+/** Checks the JSON/HTML contracts the dashboard page's client script relies on, for a premium and a basic owner. Data contract only, no real browser. */
 export async function runDashboardDemo(): Promise<DashboardDemoResult> {
   const db = openDatabase(":memory:");
 
@@ -110,5 +101,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`GET / status=${result.dashboardPageStatus}, isHtml=${result.dashboardPageIsHtml}`);
   console.log(`Premium owner: ${JSON.stringify(result.premiumOwner)}`);
   console.log(`Basic owner: ${JSON.stringify(result.basicOwner)}`);
-  console.log("NOTE: this proves the data contract only — actually opening the page in a browser is a manual step, not covered here.");
+  console.log("NOTE: this proves the data contract only. Opening the page in a real browser is still a manual step.");
 }

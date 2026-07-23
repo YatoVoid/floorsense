@@ -3,24 +3,14 @@ import { estimateDevicePosition, type PositionEstimate } from "@floorsense/posit
 import { getApNodesForVenue } from "./tenancy.ts";
 import { getCalibrationProfile } from "./calibration.ts";
 
-/**
- * Estimates a device's current (x, y) position within a venue from its most
- * recent signal_reading RSSI per AP node, using the venue's fitted (or
- * default) calibration profile. tenant_id/venue_id/hashed_device_id are all
- * filtered in the SQL's own WHERE clause, not narrowed in application code
- * after a broader read — consistent with the rest of the backend's
- * no-cross-tenant-read convention.
- */
+/** Estimates a device's current position from its most recent signal_reading per AP node, using the venue's calibration profile. */
 export function estimateCurrentPosition(
   db: DatabaseSync,
   tenantId: string,
   venueId: string,
   hashedDeviceId: string
 ): PositionEstimate {
-  // SQLite's documented bare-column behavior: with exactly one MAX()
-  // aggregate and a GROUP BY, non-aggregated selected columns (rssi here)
-  // come from the row that produced that MAX value — so this returns each
-  // AP node's most recent signal_reading, not an arbitrary one.
+  // SQLite's bare-column trick: with one MAX() and a GROUP BY, rssi comes from the max-timestamp row.
   const rows = db
     .prepare(
       `SELECT ap_node_id, rssi, MAX(timestamp) AS latest_timestamp

@@ -17,7 +17,7 @@ test("the three tiers produce real, distinct HTTP status/body differences for id
   assert.ok(result.standard.statsHourOfDayTotal > 0, "standard must see the real hour-of-day pattern");
   assert.ok(result.premium.statsHourOfDayTotal > 0, "premium must see the real hour-of-day pattern");
 
-  // Aggregate counts must be identical across all three tiers — same underlying data, only detail differs.
+  // aggregate counts should match across tiers, only detail level differs
   assert.strictEqual(result.basic.statsNewDeviceCount, result.standard.statsNewDeviceCount);
   assert.strictEqual(result.standard.statsNewDeviceCount, result.premium.statsNewDeviceCount);
 });

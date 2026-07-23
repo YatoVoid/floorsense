@@ -28,15 +28,7 @@ export interface HeatmapDemoResult {
   returnVisitStatsDeviceCount: number;
 }
 
-/**
- * End-to-end proof that the full pipeline (ingestion -> positioning ->
- * dwell-weighting -> HTTP) works: seeds a venue, calibrates it from
- * synthetic samples, ingests real signal_reading events (through the
- * consent-gated path) for one device concentrated at a known location and
- * a second device scattered briefly elsewhere, then logs in over real HTTP
- * and fetches both new GET endpoints, confirming the concentrated
- * location's grid cell is the hottest in the returned heatmap.
- */
+/** Seeds a venue, ingests events for a concentrated device and a scattered one, then checks the heatmap's hottest cell over real HTTP. */
 export async function runHeatmapDemo(): Promise<HeatmapDemoResult> {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "Heatmap Demo Owner", "demo-password-123");
@@ -71,10 +63,7 @@ export async function runHeatmapDemo(): Promise<HeatmapDemoResult> {
   const fitted = fitCalibrationProfile(db, owner.id, venue.id);
   if (!fitted) throw new Error("expected calibration to fit successfully");
 
-  // Device A: concentrated at (7.5, 7.5) — deliberately not on an integer
-  // cell boundary, for the same reason heatmap.test.ts avoids one (a tiny
-  // floating-point trilateration residual shouldn't be able to flip which
-  // cell it floors into).
+  // Off an integer cell boundary so trilateration rounding can't flip the cell.
   const concentratedDeviceId = hashDeviceId("aa:aa:aa:aa:aa:aa", "heatmap-demo-salt");
   recordConsentGrant(db, {
     tenantId: owner.id,
@@ -193,9 +182,7 @@ export async function runHeatmapDemo(): Promise<HeatmapDemoResult> {
       returnVisitStatsDeviceCount: stats.perDevice.length,
     };
   } finally {
-    // Ensures the server (and thus the process/test runner) is never left
-    // dangling if a fetch above throws — a real issue this task hit when
-    // the tier gate's 402 wasn't accounted for here yet.
+    // Always closes the server, even if a fetch above throws.
     await new Promise<void>((resolve) => server.close(() => resolve()));
     db.close();
   }

@@ -3,9 +3,9 @@
 ## What this is
 
 A consent-based WiFi presence analytics system for physical venues
-(restaurants, cafes). Visitors connect to an on-site open WiFi network;
-a captive portal shows a consent/terms splash page before granting
-internet access — that's where consent lives. Once connected, the venue's
+(restaurants, cafes). Visitors connect to an on-site open WiFi network.
+A captive portal shows a consent splash page before granting internet
+access, and that's where consent lives. Once connected, the venue's
 access point(s) observe signal strength from the joined device, and the
 system builds seating heatmaps, dwell-time stats, and return-visit
 tracking for the business owner.
@@ -27,57 +27,50 @@ tracking for the business owner.
 ## Tech stack
 
 **Node.js + TypeScript**, using Node's built-in `node:sqlite` module for
-local persistence (no native-module dependency), and Node's native
-TypeScript type-stripping (no separate build step needed for
-development — `.ts` files run directly via `node`).
+local persistence (no native-module dependency) and Node's native
+TypeScript execution (no build step, `.ts` files run directly via `node`).
 
 Why Node/TS:
-- The core domain (AP join/leave/signal events, real-time presence,
-  eventually a network-facing captive-portal server) is fundamentally
-  event-driven and I/O-bound — a strong fit for Node's async model.
-- The eventual real deployment swaps a simulated AP adapter for one that
-  talks to hostapd/dnsmasq and, further out, an ESP32-based AP. Keeping
-  the adapter and the backend in one language avoids a schema/type-drift
-  problem across a network boundary that will already be difficult
-  enough (embedded device <-> server).
-- `node:sqlite` avoids a native-module dependency (`better-sqlite3`
-  requires prebuilt binaries or a working native toolchain); Node's
-  built-in module has neither of those failure modes and is verified
-  present and working on this project's target Node version (26.4.0+).
+- The core domain (AP join/leave/signal events, real-time presence, a
+  network-facing captive-portal server) is event-driven and I/O-bound, a
+  strong fit for Node's async model.
+- The eventual real deployment swaps the simulated AP adapter for one
+  that talks to hostapd/dnsmasq and, later, an ESP32-based AP. Keeping
+  the adapter and the backend in one language avoids type drift across
+  that boundary.
+- `node:sqlite` skips the native-module dependency `better-sqlite3`
+  would need (prebuilt binaries or a working toolchain). Verified
+  present and working on this project's Node version (26.4.0+).
 
-Python (FastAPI/SQLAlchemy + numpy/scipy) was considered for its
-numeric-computing ecosystem, which is relevant to the later
-trilateration/calibration math. It was not chosen for the initial
-scaffold because the event pipeline and network-facing pieces are the
-larger share of this system's code, and splitting the codebase across
-two languages this early adds real coordination cost for no immediate
-benefit. If calibration math later turns out to need heavier numeric
-tooling than Node's ecosystem comfortably provides, a small Python
-microservice for just that computation is a clean addition — it does
-not require rewriting anything built in this scaffold.
+Python (FastAPI/SQLAlchemy + numpy/scipy) was considered for the
+trilateration/calibration math, but the event pipeline and
+network-facing pieces are the bigger share of this system's code, and
+splitting across two languages this early wasn't worth the coordination
+cost. A small Python microservice just for calibration math is still a
+clean option later if Node's numeric tooling ever falls short.
 
 ## Package layout
 
-- `packages/shared` — cross-package types (`APEvent` and friends) and the
-  one hashing utility every identifier must pass through. No I/O, no
-  framework dependency — pure logic, directly testable.
-- `packages/ap-adapter-sim` — emits synthetic `APEvent` streams (device
-  join/leave/signal-strength readings) for local development and demos.
-  This is the intended swap point: a future `ap-adapter-hostapd` package
-  implementing the same emitted-event contract replaces this one when
-  running against a real access point, without the backend needing to
-  change.
-- `packages/backend` — ingests `APEvent`s, persists them (tenant-scoped),
-  and will host the captive-portal web server, calibration/heatmap logic,
-  and the owner-facing API in later key results. Local SQLite now is the
-  other intended swap point — swapping to a remote database later is
-  meant to be a persistence-layer change, not a rewrite of the ingestion
-  or analytics logic above it.
+- `packages/shared`: cross-package types (`ApEvent` and friends) and
+  the device-hashing utility every identifier passes through.
+- `packages/ap-adapter-sim`: simulates a WiFi access point's presence
+  events (join/leave/signal readings) for local development and demos.
+  The intended swap point for a real hostapd-backed adapter later.
+- `packages/positioning`: RSSI-to-position math: trilateration from 3+
+  AP nodes, weighted-centroid fallback for 1-2.
+- `packages/backend`: SQLite persistence, multi-tenant data model,
+  consent gating, calibration fitting, session/dwell-time
+  reconstruction, heatmap generation, and subscription tiers.
+- `packages/captive-portal`: the device-facing HTTP server: the
+  consent splash page and the accept endpoint a joining device hits.
+- `packages/owner-portal`: the owner-facing HTTP server: login,
+  registration, the dashboard page, and the venue/heatmap/stats/
+  calibration API.
 
 ## Local-first now, distributed later
 
-Everything in this repo runs on a single machine today: the simulated
-adapter, the backend, and (in later key results) the owner-facing web
-app. The two swap points called out above (adapter, persistence) are
-where the real-hardware/real-server version diverges from this proof of
-concept — everything else is meant to carry over unchanged.
+Everything here runs on a single machine: the simulated adapter, the
+backend, and the owner-facing web app. Two places are meant as swap
+points for a real deployment: the AP adapter (simulated now, hostapd/
+ESP32-backed later) and the persistence layer (local SQLite now, a
+remote database later). Everything else should carry over unchanged.

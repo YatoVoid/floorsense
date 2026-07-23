@@ -66,7 +66,7 @@ test("verifyOwnerCredentials returns null for an unknown owner name", () => {
   db.close();
 });
 
-test("unknown owner and wrong password both perform exactly one hash computation — the same code shape", () => {
+test("unknown owner and wrong password both perform exactly one hash computation", () => {
   const db = openDatabase(":memory:");
   createOwnerWithPassword(db, "Shape Test Owner", "the-real-password");
 

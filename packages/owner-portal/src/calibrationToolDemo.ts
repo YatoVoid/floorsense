@@ -19,19 +19,7 @@ export interface CalibrationToolDemoResult {
   fittedPathLossExponent: number;
 }
 
-/**
- * End-to-end proof of the exact data contract the new calibration-tool UI
- * (KR9) depends on: discovers a venue's real AP nodes over real HTTP via
- * GET /venues/:id/ap-nodes, builds each calibration sample's request body
- * through the SAME buildCalibrationSamplePayload function the browser form
- * calls (not a hand-rolled equivalent), and submits it through the
- * existing POST /venues/:venueId/calibration-samples endpoint (KR5) —
- * confirming fitCalibrationProfile (KR3) successfully fits a profile from
- * data that arrived entirely through this path. This proves the data
- * contract only; actually clicking through the floor plan in a real
- * browser remains a manual step, not covered here (no headless-browser
- * dependency is introduced in this repo).
- */
+/** Discovers AP nodes, builds a sample via the real buildCalibrationSamplePayload, and posts it. Data contract only; no browser click-through here. */
 export async function runCalibrationToolDemo(): Promise<CalibrationToolDemoResult> {
   const db = openDatabase(":memory:");
   const owner = createOwnerWithPassword(db, "Calibration Tool Demo Owner", "demo-password-123");
@@ -105,6 +93,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       `pathLossExponent=${result.fittedPathLossExponent.toFixed(3)}`
   );
   console.log(
-    "NOTE: this proves the data contract only — actually clicking through the floor plan in a real browser is a manual step, not covered here."
+    "NOTE: this proves the data contract only. Clicking through the floor plan in a real browser is still a manual step."
   );
 }

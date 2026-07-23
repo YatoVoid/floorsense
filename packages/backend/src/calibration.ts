@@ -3,13 +3,7 @@ import type { CalibrationProfile } from "@floorsense/positioning";
 
 export const MIN_CALIBRATION_SAMPLES = 5;
 
-/**
- * Used until a venue has fitted its own profile. Matches ap-adapter-sim's
- * simulator constants — a reasonable central estimate for typical indoor
- * WiFi path loss (exponent commonly cited as 2-4) rather than an arbitrary
- * placeholder — so positioning degrades gracefully for a brand-new venue
- * instead of failing.
- */
+/** Used until a venue fits its own profile. Typical indoor WiFi path-loss exponent is 2-4. */
 export const DEFAULT_CALIBRATION_PROFILE: CalibrationProfile = {
   referenceRssiAt1m: -40,
   pathLossExponent: 2.7,
@@ -32,17 +26,7 @@ export function recordCalibrationSample(db: DatabaseSync, input: CalibrationSamp
   ).run(input.tenantId, input.venueId, input.apNodeId, input.rssi, input.knownX, input.knownY, Date.now());
 }
 
-/**
- * Fits referenceRssiAt1m/pathLossExponent via linear regression of RSSI
- * against log10(distance) across this venue's calibration samples (distance
- * computed from each sample's known floor position to its AP node's actual
- * position). Returns null — and does not upsert anything — when there are
- * fewer than MIN_CALIBRATION_SAMPLES samples, or when the samples don't
- * carry enough distance variance to fit reliably (e.g. all recorded at
- * essentially the same distance from every AP node); callers fall back to
- * getCalibrationProfile's documented default in either case rather than
- * trusting a degenerate fit.
- */
+/** Fits reference RSSI and path-loss exponent via linear regression. Returns null (no upsert) below MIN_CALIBRATION_SAMPLES or if distance variance is too low to fit reliably. */
 export function fitCalibrationProfile(
   db: DatabaseSync,
   tenantId: string,
@@ -102,7 +86,7 @@ export function fitCalibrationProfile(
   return profile;
 }
 
-/** Tenant-scoped read, following the rest of the backend's no-cross-tenant-read convention. */
+/** Tenant-scoped read. */
 export function getCalibrationProfile(db: DatabaseSync, tenantId: string, venueId: string): CalibrationProfile {
   const row = db
     .prepare(

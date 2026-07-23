@@ -1,6 +1,6 @@
 import type { VenueHeatmap, ReturnVisitStats, Venue, ApNodeRecord } from "@floorsense/backend";
 
-/** Duplicated locally rather than importing from @floorsense/captive-portal — owner-portal has no existing dependency on that package, and this is a tiny, self-contained utility. */
+/** Small local copy since owner-portal doesn't depend on captive-portal. */
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -12,12 +12,7 @@ export function escapeHtml(value: string): string {
 
 export type HeatmapUpgradeRequired = { error: string; requiredTier: string };
 
-/**
- * Pure: given already-fetched JSON (or null for "nothing fetched yet"),
- * produces the heatmap section's HTML. Handles all three real response
- * shapes the /venues/:id/heatmap endpoint can return: a real VenueHeatmap
- * (KR6), the 402 upgrade-required shape (KR7), or no data yet.
- */
+/** Renders the heatmap section: a real grid, the 402 upgrade message, or a no-data prompt. */
 export function renderHeatmapSection(response: VenueHeatmap | HeatmapUpgradeRequired | null): string {
   if (response === null) {
     return '<p class="no-data">Select a venue to view its heatmap.</p>';
@@ -56,12 +51,7 @@ export function renderHeatmapSection(response: VenueHeatmap | HeatmapUpgradeRequ
   );
 }
 
-/**
- * Pure: given an already-fetched ReturnVisitStats (which may already be
- * tier-redacted by the server — empty perDevice, zeroed
- * hourOfDayDistribution, per KR7), produces the stats section's HTML.
- * Renders correctly whether given a full-detail or a redacted shape.
- */
+/** Renders the stats section. Works with either a full or tier-redacted ReturnVisitStats. */
 export function renderStatsSummary(stats: ReturnVisitStats): string {
   const hourBars = stats.hourOfDayDistribution
     .map((count, hour) => '<div class="hour-bar" style="height: ' + count * 10 + 'px;" title="' + hour + ':00 - ' + count + ' visits"></div>')
@@ -107,13 +97,7 @@ export interface MarkedPosition {
   y: number;
 }
 
-/**
- * Pure geometry: scales a click's pixel offset inside the rendered
- * floor-plan container to the venue's real floorWidth x floorHeight
- * units, clamped to the floor's bounds so a click right at (or slightly
- * outside, due to rounding) the container's edge never produces an
- * out-of-bounds floor coordinate.
- */
+/** Scales a click's pixel offset to floor units, clamped to the floor's bounds. */
 export function pixelToFloorCoordinates(
   pixelX: number,
   pixelY: number,
@@ -130,14 +114,7 @@ export function pixelToFloorCoordinates(
   };
 }
 
-/**
- * Pure: renders a floor-plan div sized to the venue's real aspect ratio,
- * with each AP node positioned as a percentage of floorWidth/floorHeight
- * (not raw pixels) — this keeps the function independent of whatever
- * pixel size the container actually renders at in a real browser. The
- * currently-marked calibration point (if any) is rendered as a distinct
- * marker.
- */
+/** Renders the floor plan div. AP nodes and the marked position are placed by percentage, not pixels. */
 export function renderFloorPlan(venue: Venue, apNodes: ApNodeRecord[], markedPosition: MarkedPosition | null): string {
   const aspectRatio = venue.floorWidth / venue.floorHeight;
 
@@ -175,16 +152,7 @@ export function renderFloorPlan(venue: Venue, apNodes: ApNodeRecord[], markedPos
   );
 }
 
-/**
- * Pure: renders the calibration form. With no marked position yet, shows
- * only a prompt (no submit control — there is nothing to submit). Once a
- * position is marked, shows an AP-node picker, the read-only marked
- * known-X/Y (populated by the click glue, never typed by hand), a manual
- * RSSI number input explicitly labeled as manual/proof-of-concept entry
- * (browsers have no WiFi-signal-strength API, and this repo has no live
- * sensor loop feeding the dashboard — this is an honest limitation, not a
- * cut corner), and a submit button.
- */
+/** Renders the calibration form. Just a prompt until a position is marked, then the AP-node picker plus a manual RSSI field (browsers can't read WiFi signal strength). */
 export function renderCalibrationForm(apNodes: ApNodeRecord[], markedPosition: MarkedPosition | null): string {
   if (!markedPosition) {
     return '<p class="no-data">Click on the floor plan above to mark a known position.</p>';
@@ -211,7 +179,7 @@ export function renderCalibrationForm(apNodes: ApNodeRecord[], markedPosition: M
     '<select id="calibration-ap-node">' +
     apNodeOptions +
     "</select>" +
-    '<label for="calibration-rssi">RSSI reading (enter manually — no live sensor in this browser demo):</label>' +
+    '<label for="calibration-rssi">RSSI reading (enter manually, no live sensor in this browser demo):</label>' +
     '<input type="number" id="calibration-rssi" step="0.1" required />' +
     '<button type="submit">Record calibration sample</button>' +
     "</form>"
@@ -222,16 +190,7 @@ export type CalibrationSampleValidationResult =
   | { valid: true; payload: { apNodeId: string; rssi: number; knownX: number; knownY: number } }
   | { valid: false; error: string };
 
-/**
- * Validates and coerces raw calibration-form input into the exact body
- * POST /venues/:venueId/calibration-samples already expects. This is a UX
- * nicety — catching bad input before a wasted round trip — NOT the
- * security boundary: the server independently validates the same shape
- * (KR5's existing typeof checks) and rejects a malformed body regardless
- * of what this function does. rssi arrives as a string (a DOM input's
- * .value is always a string, whatever its type attribute); knownX/knownY
- * arrive already numeric, from pixelToFloorCoordinates's own return value.
- */
+/** Validates form input into the body POST /calibration-samples expects. Just a UX check; the server validates independently too. */
 export function buildCalibrationSamplePayload(input: {
   apNodeId: string;
   rssi: string;
@@ -251,7 +210,7 @@ export function buildCalibrationSamplePayload(input: {
   return { valid: true, payload: { apNodeId: input.apNodeId, rssi: rssi, knownX: input.knownX, knownY: input.knownY } };
 }
 
-/** Pure: renders a success/error message from the calibration-samples endpoint's existing 201/400/401/404 response shapes. */
+/** Renders a success/error message from the calibration-samples endpoint's response. */
 export function renderCalibrationResult(result: { ok: boolean; body: unknown }): string {
   if (result.ok) {
     return '<p class="success">Calibration sample recorded.</p>';
@@ -261,11 +220,11 @@ export function renderCalibrationResult(result: { ok: boolean; body: unknown }):
   return '<p class="error">' + escapeHtml(message) + "</p>";
 }
 
-/** Pure: the "no venues yet" empty-state message plus a small venue-creation form, shown in place of a normal venue list for a brand-new owner. */
+/** Empty-state message plus a small form, shown when a new owner has no venues yet. */
 export function renderVenueCreationForm(): string {
   return (
     '<div id="venue-creation">' +
-    "<p>No venues yet — create your first one:</p>" +
+    "<p>No venues yet. Create your first one:</p>" +
     '<form id="venue-creation-form">' +
     '<input id="venue-creation-name" type="text" placeholder="Venue name" required />' +
     '<input id="venue-creation-width" type="number" step="0.1" placeholder="Floor width (meters)" required />' +
@@ -280,13 +239,7 @@ export type VenueCreationValidationResult =
   | { valid: true; payload: { name: string; floorWidth: number; floorHeight: number } }
   | { valid: false; error: string };
 
-/**
- * Validates and coerces raw venue-creation form input (all three fields
- * arrive as strings — a DOM input's .value is always a string) into the
- * exact body POST /venues expects. A UX nicety, not the security boundary:
- * the server independently validates the same shape (KR10 task 2) and
- * rejects a malformed body regardless of what this function does.
- */
+/** Validates form input into the body POST /venues expects. Just a UX check; the server validates independently too. */
 export function buildVenueCreationPayload(input: {
   name: string;
   floorWidth: string;
@@ -304,16 +257,9 @@ export function buildVenueCreationPayload(input: {
 }
 
 /**
- * The static HTML shell. The inline <script> embeds the EXACT source of
- * escapeHtml/renderHeatmapSection/renderStatsSummary above via
- * Function.prototype.toString() — verified empirically that Node's
- * type-stripping produces valid (whitespace-padded) plain JS this way —
- * so the browser runs the identical, unit-tested functions rather than a
- * second, hand-duplicated (and untested) copy of the same logic. Only the
- * DOM-binding glue below (fetch calls, event listeners, localStorage) is
- * NOT unit-tested — no headless browser is introduced in this repo; that
- * glue is a stated, deliberate manual-smoke-check boundary, not silently
- * assumed to be covered.
+ * The page shell. The inline script embeds the tested functions above via
+ * toString(), so the browser runs the same code the tests cover. The
+ * fetch/DOM glue below has no automated test; it needs a manual check.
  */
 export function renderDashboardPage(): string {
   const embeddedFunctions = [

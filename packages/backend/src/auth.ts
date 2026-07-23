@@ -4,18 +4,15 @@ import type { Owner } from "./tenancy.ts";
 
 const SCRYPT_KEYLEN = 64;
 
-/** Injectable so tests can count invocations without touching the real node:crypto module. */
+/** Injectable so tests can count invocations without mocking node:crypto. */
 export type ScryptFn = (password: string, salt: string, keylen: number) => Buffer;
 const defaultScrypt: ScryptFn = (password, salt, keylen) => scryptSync(password, salt, keylen);
 
-// Fixed dummy salt/hash used when no owner matches, so verifyOwnerCredentials
-// performs exactly the same shape of work (one scrypt call) whether the
-// owner exists or not — an unknown name must not be observably cheaper than
-// a known name with the wrong password.
+// Dummy salt/hash for unknown owners, so lookups always cost one scrypt call.
 const DUMMY_SALT = "0".repeat(32);
 const DUMMY_HASH_HEX = scryptSync("no-such-owner", DUMMY_SALT, SCRYPT_KEYLEN).toString("hex");
 
-/** Creates an owner with a real, salted, hashed password — never stores or returns the plaintext. */
+/** Stores only a salted hash, never the plaintext password. */
 export function createOwnerWithPassword(db: DatabaseSync, name: string, password: string): Owner {
   const id = randomUUID();
   const createdAt = Date.now();
@@ -29,14 +26,7 @@ export function createOwnerWithPassword(db: DatabaseSync, name: string, password
   return { id, name, createdAt };
 }
 
-/**
- * Returns the matching ownerId, or null if the name is unknown or the
- * password is wrong. Always performs exactly one hash computation — even
- * when no owner with this name exists, using a fixed dummy salt/hash — so
- * "unknown owner" and "wrong password" are indistinguishable by call shape,
- * not just by response content. `scrypt` is injectable so tests can wrap it
- * with a counting spy to verify this directly.
- */
+/** Always does one hash computation, even for an unknown owner, so lookup timing doesn't leak whether the name exists. */
 export function verifyOwnerCredentials(
   db: DatabaseSync,
   name: string,
@@ -59,7 +49,7 @@ export function verifyOwnerCredentials(
   return row.id;
 }
 
-/** Creates a session token for an owner. `now`/`ttlMs` are explicit parameters (not internal Date.now()) so expiry is testable without a real sleep. */
+/** `now`/`ttlMs` are passed in explicitly so expiry is testable without a real sleep. */
 export function createSession(db: DatabaseSync, ownerId: string, now: number, ttlMs: number): string {
   const token = randomUUID();
   db.prepare("INSERT INTO owner_sessions (token, owner_id, created_at, expires_at) VALUES (?, ?, ?, ?)").run(
@@ -71,7 +61,7 @@ export function createSession(db: DatabaseSync, ownerId: string, now: number, tt
   return token;
 }
 
-/** Returns the ownerId for a valid, unexpired session token, or null for a missing/expired/unknown token. `now` is explicit so expiry is testable deterministically. */
+/** Returns the ownerId for a valid, unexpired token, or null if missing/expired/unknown. */
 export function getOwnerIdForSessionToken(db: DatabaseSync, token: string, now: number): string | null {
   const row = db.prepare("SELECT owner_id, expires_at FROM owner_sessions WHERE token = ?").get(token) as
     | { owner_id: string; expires_at: number }

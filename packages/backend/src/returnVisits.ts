@@ -2,15 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { DeviceSession } from "./sessions.ts";
 import { getSessionsForVenue } from "./sessions.ts";
 
-/**
- * A brief signal dropout (phone momentarily out of range, or an AP-level
- * reassociation) should not fragment one real visit into two; a gap this
- * long or longer is treated as a genuinely separate later visit. 15 minutes
- * is a product judgment call — long enough to absorb a real "stepped
- * outside for a few minutes" scenario, short enough not to merge two
- * clearly separate visits later the same day. Not a scientific constant;
- * revisit if real venue data suggests otherwise.
- */
+/** Gaps shorter than this are treated as one visit (brief signal dropout), not two. Product judgment call, not a scientific constant. */
 export const SESSION_GAP_MS = 15 * 60 * 1000;
 
 export interface Visit {
@@ -32,15 +24,7 @@ function groupByDevice(sessions: DeviceSession[]): Map<string, DeviceSession[]> 
   return map;
 }
 
-/**
- * Merges a single device's sessions (already sorted by joinedAt) into
- * visits: consecutive sessions with a gap under SESSION_GAP_MS between one's
- * leftAt and the next's joinedAt are combined into one visit. A session
- * with leftAt === null (ongoing, or superseded by a later join per
- * reconstructSessions) never merges with what follows it — its true end
- * time is unknown, so there's no gap to measure, and treating it as a
- * definite visit boundary is the only well-defined choice.
- */
+/** Merges sessions with a gap under SESSION_GAP_MS into one visit. A session with leftAt null never merges with what follows (its end time is unknown). */
 export function mergeSessionsIntoVisits(sessions: DeviceSession[]): Visit[] {
   const visits: Visit[] = [];
 
@@ -70,7 +54,7 @@ export interface DeviceReturnStats {
   averageDwellTimeMs: number | null;
   firstSeenAt: number;
   lastSeenAt: number;
-  /** A device is "returning" once it has >= 2 gap-merged visits — i.e. it came back on a separate occasion, not just a signal hiccup. */
+  /** True once a device has 2+ gap-merged visits (came back on a separate occasion). */
   isReturning: boolean;
 }
 
@@ -80,11 +64,11 @@ export interface ReturnVisitStats {
   returningDeviceCount: number;
   /** returningDeviceCount / perDevice.length, or 0 if there are no devices at all. */
   returningRatio: number;
-  /** Visit-start counts bucketed by UTC hour-of-day (index 0-23). Documented as UTC since no venue-timezone data is modeled anywhere yet. */
+  /** Visit-start counts by UTC hour (index 0-23). No venue-timezone data exists yet. */
   hourOfDayDistribution: number[];
 }
 
-/** Tenant-scoped: derives per-device and venue-level return-visit statistics from this venue's reconstructed sessions. */
+/** Tenant-scoped: per-device and venue-level return-visit stats from this venue's sessions. */
 export function computeReturnVisitStats(db: DatabaseSync, tenantId: string, venueId: string): ReturnVisitStats {
   const sessions = getSessionsForVenue(db, tenantId, venueId);
   const byDevice = groupByDevice(sessions);

@@ -40,14 +40,7 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-/**
- * SQLite's own extended result code for a UNIQUE constraint violation
- * (SQLITE_CONSTRAINT_UNIQUE), verified empirically against this repo's
- * node:sqlite version (a scratch test reproducing the exact error node:sqlite
- * throws) rather than assumed from documentation alone. Narrower and more
- * reliable than the generic `code: "ERR_SQLITE_ERROR"`, which any SQLite
- * error (not just a duplicate name) would also carry.
- */
+/** node:sqlite's extended result code for SQLITE_CONSTRAINT_UNIQUE. */
 const SQLITE_CONSTRAINT_UNIQUE = 2067;
 
 function isUniqueConstraintViolation(err: unknown): boolean {
@@ -67,13 +60,7 @@ function extractBearerToken(req: IncomingMessage): string | null {
 
 type AuthResolution = { ok: true; ownerId: string } | { ok: false; status: 401 | 404 };
 
-/**
- * Resolves the authenticated owner for a request AND verifies (via a real
- * DB query, never trusting the client) that they own the given venueId.
- * 404 — not 403 — for a wrong owner or a nonexistent venue: don't confirm
- * to a non-owner that a venueId exists at all, consistent with login's own
- * no-information-leak principle.
- */
+/** Verifies the caller owns venueId via a real DB query. 404 (not 403) so a wrong owner can't confirm the venue exists. */
 function resolveAuthenticatedOwnerForVenue(db: DatabaseSync, req: IncomingMessage, venueId: string): AuthResolution {
   const token = extractBearerToken(req);
   const ownerId = token ? getOwnerIdForSessionToken(db, token, Date.now()) : null;
@@ -87,7 +74,7 @@ function writeAuthFailure(res: ServerResponse, status: 401 | 404): void {
   res.end(JSON.stringify({ error: status === 401 ? "unauthorized" : "not found" }));
 }
 
-/** Resolves the authenticated owner for a request with no venue-ownership check — for routes (like listing an owner's own venues) that aren't scoped to one specific venueId. */
+/** For routes not scoped to one venueId, like listing an owner's own venues. */
 function resolveAuthenticatedOwner(db: DatabaseSync, req: IncomingMessage): { ok: true; ownerId: string } | { ok: false } {
   const token = extractBearerToken(req);
   const ownerId = token ? getOwnerIdForSessionToken(db, token, Date.now()) : null;
@@ -96,14 +83,9 @@ function resolveAuthenticatedOwner(db: DatabaseSync, req: IncomingMessage): { ok
 }
 
 /**
- * The owner-facing HTTP API. Unlike @floorsense/captive-portal (device-
- * facing, tenant/venue fixed per server instance), this server serves many
- * owners from one process — tenant identity is resolved per-request from a
- * bearer session token, never fixed at construction time.
- *
- * Plain HTTP, no TLS — a documented limitation of this local-dev proof of
- * concept. A real deployment must terminate TLS in front of this server;
- * session tokens are not protected in transit otherwise.
+ * Owner-facing HTTP API. Tenant identity is resolved per-request from a
+ * bearer token (unlike captive-portal, which fixes tenant/venue per instance).
+ * Plain HTTP, no TLS: a real deployment needs TLS in front of this.
  */
 export function createOwnerPortalServer(db: DatabaseSync): Server {
   return createServer((req, res) => {
@@ -168,10 +150,10 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
               res.end(JSON.stringify({ error: "that name is already registered" }));
               return;
             }
-            throw err; // not a duplicate-name error — a genuine unexpected failure, let it surface as 500 below.
+            throw err; // some other DB error, let it surface as 500 below.
           }
 
-          // Register-then-log-in: one round trip, mirroring /auth/login's response shape.
+          // Registering logs the owner in immediately, same response shape as /auth/login.
           const token = createSession(db, owner.id, Date.now(), SESSION_TTL_MS);
           res.writeHead(201, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ token }));
@@ -236,12 +218,7 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
         return;
       }
 
-      // Deliberately not tier-gated, same as the calibration-write route
-      // below: this is setup/write-adjacent data an owner needs to
-      // calibrate their OWN venue regardless of tier, not an analytics
-      // read — gating it would break Basic-tier owners' ability to use
-      // the calibration tool at all, contradicting "keep Basic genuinely
-      // useful."
+      // Not tier-gated: an owner needs this to calibrate their own venue regardless of plan.
       const apNodes = getApNodesForVenue(db, auth.ownerId, venueId);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(apNodes));
@@ -298,11 +275,7 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
 
       const tier = getOwnerTier(db, auth.ownerId);
       if (!tierAllowsHeatmap(tier)) {
-        // 402 (Payment Required), not 403: this is a real, if uncommonly
-        // used, HTTP status many real APIs use for "upgrade required"
-        // scenarios — distinct from 403's "you will never be allowed"
-        // semantic, since upgrading the tier resolves this. The heatmap is
-        // never computed at all in this branch.
+        // 402 Payment Required: upgrading the tier resolves this, unlike a 403.
         res.writeHead(402, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "upgrade required", requiredTier: "standard" }));
         return;
@@ -323,10 +296,7 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
         return;
       }
 
-      // Tier is looked up fresh per request (never cached in the session
-      // token), so a tier change takes effect immediately for any
-      // already-issued session — not a perceived bug if a token's owner's
-      // access changes mid-session.
+      // Tier is looked up fresh per request, so a tier change applies immediately.
       const tier = getOwnerTier(db, auth.ownerId);
       const stats = applyTierToReturnVisitStats(computeReturnVisitStats(db, auth.ownerId, venueId), tier);
       res.writeHead(200, { "Content-Type": "application/json" });

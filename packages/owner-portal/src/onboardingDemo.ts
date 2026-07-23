@@ -11,17 +11,7 @@ export interface OnboardingDemoResult {
   statsStatus: number;
 }
 
-/**
- * End-to-end proof that a genuinely NEW owner (never pre-seeded via
- * createOwnerWithPassword/createVenue directly) can reach the whole system
- * through nothing but its own public HTTP surface: register -> create a
- * first venue -> reach the existing heatmap/return-visit-stats endpoints.
- * This is the concrete proof the "dead end" gap (no signup path existed
- * before KR10) is actually closed, not just that the two new routes
- * individually return 2xx in isolation. Real-browser interaction with the
- * register toggle and venue-creation form remains a manual smoke-check
- * step, not covered here (no headless-browser dependency introduced).
- */
+/** A brand-new owner registers, creates a venue, and reaches the heatmap/stats endpoints, all over real HTTP. */
 export async function runOnboardingDemo(): Promise<OnboardingDemoResult> {
   const db = openDatabase(":memory:");
   const server = createOwnerPortalServer(db);
@@ -76,7 +66,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   console.log(`Register: ${result.registerStatus}`);
   console.log(`Venue create: ${result.venueCreateStatus}`);
   console.log(`Venues after creation: ${result.venuesAfterCreation}`);
-  console.log(`Heatmap: ${result.heatmapStatus} (402 expected — a brand-new owner defaults to basic tier)`);
+  console.log(`Heatmap: ${result.heatmapStatus} (402 expected, new owners default to basic tier)`);
   console.log(`Return-visit stats: ${result.statsStatus}`);
-  console.log("NOTE: this proves the data contract only — the register toggle and venue-creation form's real browser behavior is a manual step, not covered here.");
+  console.log("NOTE: this proves the data contract only. The register/venue forms still need a manual browser check.");
 }
