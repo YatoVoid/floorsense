@@ -41,3 +41,20 @@ test("empty raw identifier still produces a valid, distinct hash (no special-cas
   const out = hashDeviceId("", "salt-a");
   assert.strictEqual(out.length, 64);
 });
+
+test("a randomized-MAC-shaped identifier (locally-administered bit set, as real devices present) hashes exactly like any other identifier - no special-casing", () => {
+  // 0x02 has the locally-administered bit set - the standard marker modern
+  // iOS/Android devices use for a per-network randomized MAC.
+  const randomizedMac = "02:1a:2b:3c:4d:5e";
+  const out = hashDeviceId(randomizedMac, "salt-a");
+  assert.strictEqual(out.length, 64);
+  assert.match(out, /^[0-9a-f]{64}$/);
+  assert.ok(!out.includes(randomizedMac));
+});
+
+test("the same randomized MAC hashes identically across separate calls with the same salt - the property return-visit tracking actually depends on", () => {
+  const randomizedMac = "02:1a:2b:3c:4d:5e";
+  const first = hashDeviceId(randomizedMac, "venue-salt");
+  const second = hashDeviceId(randomizedMac, "venue-salt");
+  assert.strictEqual(first, second, "a device reconnecting to the same venue's network must produce the same hash every time");
+});

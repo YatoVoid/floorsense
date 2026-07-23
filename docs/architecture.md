@@ -94,3 +94,32 @@ hardware-tested in this development environment - see its own README.
 
 See `docs/positioning-accuracy.md` for what accuracy to realistically
 expect from the calibration/trilateration this hardware feeds.
+
+## Randomized MAC addresses
+
+Modern iOS (14+) and Android (10+) devices don't present their real,
+permanent MAC address to a WiFi network by default - they generate a
+**randomized MAC per network** instead. The important detail: this
+randomization is *persistent per network*, not per connection attempt.
+The same phone presents a different random MAC to two different
+venues' WiFi, but the SAME random MAC every time it reconnects to one
+specific venue's WiFi - which is exactly the stability return-visit
+tracking needs.
+
+This system never had to special-case this. `hashDeviceId` (and every
+consumer of it - the consent flow, `POST /hardware/events`) treats
+whatever identifier a device presents at consent/association time as
+an opaque string: no MAC-format validation, no assumption that it's a
+device's one "real," globally-fixed address. Whatever MAC a device
+happens to show up with, hashed with this venue's salt, becomes its
+stable identifier for this venue - whether that MAC is
+factory-permanent or per-network-randomized makes no difference to the
+hashing, consent-gating, or return-visit logic.
+
+The other kind of MAC randomization - rotating per *probe request*
+during passive WiFi scanning, before a device ever joins anything - is
+architecturally irrelevant here, not because it's been specifically
+handled, but because invariant #1 already rules out looking at
+probe-request traffic at all. This system only ever observes the MAC a
+device presents at actual association time, once it has joined and is
+headed toward the consent page.
