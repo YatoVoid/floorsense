@@ -35,7 +35,7 @@ Why Node/TS:
   network-facing captive-portal server) is event-driven and I/O-bound, a
   strong fit for Node's async model.
 - The eventual real deployment swaps the simulated AP adapter for one
-  that talks to hostapd/dnsmasq and, later, an ESP32-based AP. Keeping
+  that talks to hostapd/dnsmasq and real ESP32-based AP nodes. Keeping
   the adapter and the backend in one language avoids type drift across
   that boundary.
 - `node:sqlite` skips the native-module dependency `better-sqlite3`
@@ -74,3 +74,18 @@ backend, and the owner-facing web app. Two places are meant as swap
 points for a real deployment: the AP adapter (simulated now, hostapd/
 ESP32-backed later) and the persistence layer (local SQLite now, a
 remote database later). Everything else should carry over unchanged.
+
+## Real hardware ingestion
+
+`POST /hardware/events` (owner-portal) is the real swap point that
+exists today: any AP node reports join/leave/signal_reading events
+over plain HTTP, authenticated by a random per-venue `hardwareToken`
+generated at venue creation. That same token is used
+as the salt for hashing the device's raw MAC server-side, immediately,
+never storing or logging the raw value (invariant #2 above still
+holds - hardware never sees or computes the hash itself). Rotating a
+venue's token resets return-visit continuity for that venue, since the
+hash changes; there's no separate rotation endpoint today.
+
+See `docs/positioning-accuracy.md` for what accuracy to realistically
+expect from the calibration/trilateration this hardware feeds.

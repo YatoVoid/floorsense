@@ -100,10 +100,18 @@ npm workspaces, one package per concern:
 - `packages/owner-portal`: the owner-facing login, dashboard, and API.
 
 See `docs/architecture.md` for the invariants this system is built
-around and the reasoning behind the tech choices.
+around and the reasoning behind the tech choices, and
+`docs/positioning-accuracy.md` for what accuracy to realistically
+expect from the calibration and trilateration math.
 
 ## Real-hardware deployment
 
 `deploy/captive-portal/` has hostapd/dnsmasq/nftables config templates
 for running this on real access-point hardware later. They're templates
 and docs only, nothing in this repo runs them automatically.
+
+Real AP nodes (including ESP32 units) report presence events to
+`POST /hardware/events`, authenticated by the venue's own
+`hardwareToken` (visible via `GET /venues` once logged in as that
+venue's owner) - see `docs/architecture.md`'s "Real hardware
+ingestion" section for the exact contract.
