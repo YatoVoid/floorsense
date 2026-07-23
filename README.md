@@ -24,7 +24,7 @@ npm test
 ```
 
 That installs all 6 workspace packages and runs the full test suite
-(around 180 tests).
+(around 215 tests).
 
 ### Try the owner dashboard
 
@@ -39,10 +39,18 @@ createOwnerPortalServer(db).listen(3000, () => console.log('Open http://localhos
 "
 ```
 
-Then open **http://localhost:3000**, click "Register", create an account,
-and add your first venue from the empty-state form. This is real data:
-the SQLite file is created at `packages/backend/data/floorsense.sqlite`
-and persists across restarts.
+Then open **http://localhost:3000**, click "Register", pick a plan
+(Basic, Standard, or Premium - prices are simulated, no real card
+details are collected), and create an account. Registration simulates
+the signup payment immediately and drops you straight into the
+dashboard, which has a "Plan & Billing" section showing your plan and
+a button to simulate the next monthly charge. Add your first venue from
+the empty-state form. This is real data: the SQLite file is created at
+`packages/backend/data/floorsense.sqlite` and persists across restarts.
+
+Registering with the name **Wali** always grants full Premium access
+regardless of the plan picked at signup - a temporary test override for
+the project owner, meant to be removed later, not a real feature.
 
 ### See it working end to end with simulated data
 
@@ -54,7 +62,9 @@ the demo scripts:
 ```bash
 node packages/owner-portal/src/heatmapDemo.ts        # simulated visits -> a real heatmap
 node packages/owner-portal/src/onboardingDemo.ts     # register -> create venue -> reach the API
-node packages/captive-portal/src/demo.ts             # a device joining through the consent portal
+node packages/owner-portal/src/apNodeCreationDemo.ts # add an AP node -> calibrate against it
+node packages/owner-portal/src/billingDemo.ts         # tier purchase, Wali override, monthly billing
+node packages/captive-portal/src/demo.ts              # a device joining through the consent portal
 ```
 
 Every package's `src/` directory has a few of these runnable scripts (any
