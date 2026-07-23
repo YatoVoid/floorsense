@@ -31,7 +31,7 @@ export async function runApNodeCreationDemo(): Promise<ApNodeCreationDemoResult>
     const registerRes = await fetch(`${baseUrl}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "AP Node Creation Demo Owner", password: "demo-password-123" }),
+      body: JSON.stringify({ name: "AP Node Creation Demo Owner", password: "demo-password-123", tier: "basic" }),
     });
     if (!registerRes.ok) throw new Error(`registration failed: ${registerRes.status}`);
     const { token } = (await registerRes.json()) as { token: string };

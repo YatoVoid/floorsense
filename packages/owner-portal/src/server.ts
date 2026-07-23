@@ -9,6 +9,7 @@ import {
   computeVenueHeatmap,
   computeReturnVisitStats,
   getOwnerTier,
+  setOwnerTier,
   tierAllowsHeatmap,
   applyTierToReturnVisitStats,
   getVenuesForOwner,
@@ -16,6 +17,10 @@ import {
   createOwnerWithPassword,
   createVenue,
   createApNode,
+  recordBillingTransaction,
+  getBillingHistory,
+  simulateMonthlyBillingCharge,
+  type SubscriptionTier,
 } from "@floorsense/backend";
 import { renderDashboardPage } from "./dashboardPage.ts";
 
@@ -51,6 +56,15 @@ function isUniqueConstraintViolation(err: unknown): boolean {
     (err as { code?: string; errcode?: number }).errcode === SQLITE_CONSTRAINT_UNIQUE
   );
 }
+
+const VALID_TIERS: SubscriptionTier[] = ["basic", "standard", "premium"];
+
+/**
+ * Temporary test override, per explicit user instruction: an owner
+ * registering under this exact name gets full/all-tier privileges to try
+ * the app out. Remove this constant and its one call site to retire it.
+ */
+const WALI_TEST_OVERRIDE_NAME = "Wali";
 
 function extractBearerToken(req: IncomingMessage): string | null {
   const header = req.headers["authorization"];
@@ -135,10 +149,18 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
           const b = body !== null && typeof body === "object" ? (body as Record<string, unknown>) : null;
           const name = b?.["name"];
           const password = b?.["password"];
+          const requestedTier = b?.["tier"];
 
-          if (typeof name !== "string" || name.length === 0 || typeof password !== "string" || password.length === 0) {
+          if (
+            typeof name !== "string" ||
+            name.length === 0 ||
+            typeof password !== "string" ||
+            password.length === 0 ||
+            typeof requestedTier !== "string" ||
+            !VALID_TIERS.includes(requestedTier as SubscriptionTier)
+          ) {
             res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "name and password are required" }));
+            res.end(JSON.stringify({ error: "name, password, and a valid tier are required" }));
             return;
           }
 
@@ -154,15 +176,46 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
             throw err; // some other DB error, let it surface as 500 below.
           }
 
-          // Registering logs the owner in immediately, same response shape as /auth/login.
+          const effectiveTier: SubscriptionTier =
+            name === WALI_TEST_OVERRIDE_NAME ? "premium" : (requestedTier as SubscriptionTier);
+          setOwnerTier(db, owner.id, effectiveTier);
+          recordBillingTransaction(db, owner.id, effectiveTier, "signup", Date.now());
+
+          // Tier and payment are settled above before the token is issued, so access follows a completed purchase.
           const token = createSession(db, owner.id, Date.now(), SESSION_TTL_MS);
           res.writeHead(201, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ token }));
+          res.end(JSON.stringify({ token, tier: effectiveTier }));
         })
         .catch(() => {
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "internal error" }));
         });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/billing/history") {
+      const auth = resolveAuthenticatedOwner(db, req);
+      if (!auth.ok) {
+        writeAuthFailure(res, 401);
+        return;
+      }
+
+      const history = getBillingHistory(db, auth.ownerId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(history));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/billing/simulate-monthly-charge") {
+      const auth = resolveAuthenticatedOwner(db, req);
+      if (!auth.ok) {
+        writeAuthFailure(res, 401);
+        return;
+      }
+
+      const transaction = simulateMonthlyBillingCharge(db, auth.ownerId, Date.now());
+      res.writeHead(201, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(transaction));
       return;
     }
 

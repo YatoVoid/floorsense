@@ -599,10 +599,11 @@ ${embeddedFunctions}
       var name = document.getElementById("login-name").value;
       var password = document.getElementById("login-password").value;
       var endpoint = isRegisterMode ? "/auth/register" : "/auth/login";
+      var payload = isRegisterMode ? { name: name, password: password, tier: "basic" } : { name: name, password: password };
       fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name, password: password }),
+        body: JSON.stringify(payload),
       })
         .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, status: res.status, body: body }; }); })
         .then(function (result) {

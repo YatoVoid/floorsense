@@ -87,7 +87,7 @@ test("POST /auth/register creates a real owner and returns an immediately-usable
     const res = await fetch(`${baseUrl}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Brand New Owner", password: "a-real-password" }),
+      body: JSON.stringify({ name: "Brand New Owner", password: "a-real-password", tier: "basic" }),
     });
     assert.strictEqual(res.status, 201);
     const { token } = (await res.json()) as { token: string };
@@ -109,7 +109,7 @@ test("POST /auth/register rejects a duplicate name with 409, not a silent overwr
     const res = await fetch(`${baseUrl}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Existing Owner", password: "second-password" }),
+      body: JSON.stringify({ name: "Existing Owner", password: "second-password", tier: "basic" }),
     });
     assert.strictEqual(res.status, 409);
   });
@@ -128,6 +128,150 @@ test("POST /auth/register rejects a malformed body with 400", async () => {
       body: JSON.stringify({ name: "Missing Password Owner" }),
     });
     assert.strictEqual(res.status, 400);
+  });
+  db.close();
+});
+
+test("POST /auth/register rejects a missing or unknown tier with 400", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const noTierRes = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "No Tier Owner", password: "a-real-password" }),
+    });
+    assert.strictEqual(noTierRes.status, 400);
+
+    const unknownTierRes = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Unknown Tier Owner", password: "a-real-password", tier: "gold" }),
+    });
+    assert.strictEqual(unknownTierRes.status, 400);
+  });
+  db.close();
+});
+
+test("POST /auth/register persists the chosen tier and records a matching signup transaction", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    for (const tier of ["basic", "standard", "premium"] as const) {
+      const res = await fetch(`${baseUrl}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `${tier} Register Owner`, password: "a-real-password", tier }),
+      });
+      assert.strictEqual(res.status, 201);
+      const body = (await res.json()) as { token: string; tier: string };
+      assert.strictEqual(body.tier, tier);
+
+      const historyRes = await fetch(`${baseUrl}/billing/history`, {
+        headers: { Authorization: `Bearer ${body.token}` },
+      });
+      const history = (await historyRes.json()) as Array<{ kind: string; tier: string }>;
+      assert.strictEqual(history.length, 1, `a signup transaction must exist for the ${tier} tier`);
+      assert.strictEqual(history[0]?.kind, "signup");
+      assert.strictEqual(history[0]?.tier, tier);
+    }
+  });
+  db.close();
+});
+
+test("POST /auth/register: an owner named Wali always gets premium, regardless of the requested tier", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Wali", password: "a-real-password", tier: "basic" }),
+    });
+    assert.strictEqual(res.status, 201);
+    const body = (await res.json()) as { token: string; tier: string };
+    assert.strictEqual(body.tier, "premium", "the test override must win over the requested tier");
+
+    const historyRes = await fetch(`${baseUrl}/billing/history`, {
+      headers: { Authorization: `Bearer ${body.token}` },
+    });
+    const history = (await historyRes.json()) as Array<{ tier: string; amountCents: number }>;
+    assert.strictEqual(history.length, 1);
+    assert.strictEqual(history[0]?.tier, "premium");
+  });
+  db.close();
+});
+
+test("GET /billing/history rejects a request with no token", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/billing/history`);
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("GET /billing/history returns only the calling owner's own transactions", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const ownerARes = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "History Owner A", password: "a-real-password", tier: "standard" }),
+    });
+    const ownerA = (await ownerARes.json()) as { token: string };
+
+    const ownerBRes = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "History Owner B", password: "a-real-password", tier: "premium" }),
+    });
+    const ownerB = (await ownerBRes.json()) as { token: string };
+
+    const historyARes = await fetch(`${baseUrl}/billing/history`, {
+      headers: { Authorization: `Bearer ${ownerA.token}` },
+    });
+    const historyA = (await historyARes.json()) as Array<{ tier: string }>;
+    assert.strictEqual(historyA.length, 1);
+    assert.strictEqual(historyA[0]?.tier, "standard", "owner A must never see owner B's premium transaction");
+
+    void ownerB;
+  });
+  db.close();
+});
+
+test("POST /billing/simulate-monthly-charge rejects a request with no token", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/billing/simulate-monthly-charge`, { method: "POST" });
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("POST /billing/simulate-monthly-charge appends a real monthly transaction visible in history", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const registerRes = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Monthly Charge Owner", password: "a-real-password", tier: "standard" }),
+    });
+    const { token } = (await registerRes.json()) as { token: string };
+
+    const chargeRes = await fetch(`${baseUrl}/billing/simulate-monthly-charge`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.strictEqual(chargeRes.status, 201);
+    const charge = (await chargeRes.json()) as { kind: string; tier: string };
+    assert.strictEqual(charge.kind, "monthly");
+    assert.strictEqual(charge.tier, "standard");
+
+    const historyRes = await fetch(`${baseUrl}/billing/history`, { headers: { Authorization: `Bearer ${token}` } });
+    const history = (await historyRes.json()) as Array<{ kind: string }>;
+    assert.strictEqual(history.length, 2, "signup + the new monthly charge");
+    assert.deepStrictEqual(
+      history.map((t) => t.kind).sort(),
+      ["monthly", "signup"]
+    );
   });
   db.close();
 });
