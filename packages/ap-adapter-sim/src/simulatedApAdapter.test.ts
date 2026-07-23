@@ -62,6 +62,35 @@ test("no emitted event ever contains a raw sim-device identifier", () => {
   assert.ok(!serialized.includes("sim-device-"), "a raw simulated device id leaked into an emitted event");
 });
 
+test("getGroundTruthPositions reflects real position/joined state and never leaks a raw sim-device id", () => {
+  const adapter = new SimulatedApAdapter({
+    tenantId: "tenant-1",
+    venueId: "venue-1",
+    apNodes: [{ apNodeId: "ap-1", x: 0, y: 0 }],
+    salt: "test-salt",
+    deviceCount: 1,
+    floorWidth: 20,
+    floorHeight: 15,
+    firstJoinProbabilityPerTick: 1,
+    meanDwellTicks: 100,
+    random: () => 0.5,
+  });
+
+  const beforeJoin = adapter.getGroundTruthPositions();
+  assert.strictEqual(beforeJoin.length, 1);
+  assert.strictEqual(beforeJoin[0]?.joined, false);
+
+  adapter.tick();
+
+  const afterJoin = adapter.getGroundTruthPositions();
+  assert.strictEqual(afterJoin[0]?.joined, true);
+  assert.strictEqual(afterJoin[0]?.x, 10, "with random()=0.5 and floorWidth=20, the join position is deterministic");
+  assert.strictEqual(afterJoin[0]?.y, 7.5, "with random()=0.5 and floorHeight=15, the join position is deterministic");
+
+  const serialized = JSON.stringify(afterJoin);
+  assert.ok(!serialized.includes("sim-device-"), "a raw simulated device id leaked out of getGroundTruthPositions");
+});
+
 test("a device's hashed id is stable across ticks while joined, and after rejoining", () => {
   const adapter = new SimulatedApAdapter({
     tenantId: "tenant-1",

@@ -65,6 +65,30 @@ CREATE TABLE IF NOT EXISTS consent_grants (
   terms_version TEXT NOT NULL,
   UNIQUE (tenant_id, venue_id, hashed_device_id)
 );
+
+CREATE TABLE IF NOT EXISTS calibration_samples (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL,
+  venue_id TEXT NOT NULL,
+  ap_node_id TEXT NOT NULL,
+  rssi REAL NOT NULL,
+  known_x REAL NOT NULL,
+  known_y REAL NOT NULL,
+  recorded_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_calibration_samples_tenant_venue
+  ON calibration_samples (tenant_id, venue_id);
+
+CREATE TABLE IF NOT EXISTS venue_calibration_profiles (
+  tenant_id TEXT NOT NULL,
+  venue_id TEXT NOT NULL,
+  reference_rssi_at_1m REAL NOT NULL,
+  path_loss_exponent REAL NOT NULL,
+  sample_count INTEGER NOT NULL,
+  fitted_at INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, venue_id)
+);
 `;
 
 /**

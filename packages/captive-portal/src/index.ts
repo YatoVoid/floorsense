@@ -7,3 +7,5 @@ export { wireAdapterThroughPortal } from "./demo.ts";
 export type { PortalWiringStats, WireAdapterOptions, WiredAdapter } from "./demo.ts";
 export { renderSignagePage } from "./signage.ts";
 export type { SignageInput } from "./signage.ts";
+export { runPositioningDemo } from "./positioningDemo.ts";
+export type { PositioningDemoResult } from "./positioningDemo.ts";

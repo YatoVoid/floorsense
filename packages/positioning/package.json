@@ -1,5 +1,5 @@
 {
-  "name": "@floorsense/backend",
+  "name": "@floorsense/positioning",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,10 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test src/**/*.test.ts"
   },
-  "dependencies": {
-    "@floorsense/shared": "*",
-    "@floorsense/positioning": "*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^7.0.2",
     "@types/node": "^26.1.1"

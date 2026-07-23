@@ -190,6 +190,17 @@ export class SimulatedApAdapter extends EventEmitter {
   private emitEvent(event: ApEvent): void {
     this.emit("event", event);
   }
+
+  /**
+   * Testing/verification-only accessor: exposes each simulated device's true
+   * current position, so tests can check that position-estimation code
+   * (which only ever sees RSSI via emitted events) recovers something close
+   * to the truth. Never exposes rawId — only the already-hashed id, same as
+   * every emitted event — this is not a new raw-identifier path.
+   */
+  getGroundTruthPositions(): Array<{ hashedDeviceId: HashedDeviceId; x: number; y: number; joined: boolean }> {
+    return this.devices.map((d) => ({ hashedDeviceId: d.hashedId, x: d.x, y: d.y, joined: d.joined }));
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {
