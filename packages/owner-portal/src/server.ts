@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import { hashDeviceId } from "@floorsense/shared";
 import {
   verifyOwnerCredentials,
   createSession,
@@ -21,6 +23,8 @@ import {
   getBillingHistory,
   simulateMonthlyBillingCharge,
   TIER_PRICING,
+  getVenueById,
+  ingestApEvent,
   type SubscriptionTier,
 } from "@floorsense/backend";
 import { renderDashboardPage } from "./dashboardPage.ts";
@@ -30,6 +34,14 @@ const CALIBRATION_PATH = /^\/venues\/([^/]+)\/calibration-samples$/;
 const AP_NODES_PATH = /^\/venues\/([^/]+)\/ap-nodes$/;
 const HEATMAP_PATH = /^\/venues\/([^/]+)\/heatmap$/;
 const RETURN_VISIT_STATS_PATH = /^\/venues\/([^/]+)\/return-visit-stats$/;
+const AP_EVENT_TYPES = new Set(["join", "leave", "signal_reading"]);
+
+/** Constant-time so a wrong token can't be brute-forced byte-by-byte via response timing. */
+function tokensMatch(provided: string, expected: string): boolean {
+  const providedBuf = Buffer.from(provided);
+  const expectedBuf = Buffer.from(expected);
+  return providedBuf.length === expectedBuf.length && timingSafeEqual(providedBuf, expectedBuf);
+}
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve) => {
@@ -322,6 +334,69 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
 
           res.writeHead(201, { "Content-Type": "application/json" });
           res.end(JSON.stringify(apNode));
+        })
+        .catch(() => {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "internal error" }));
+        });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/hardware/events") {
+      readJsonBody(req)
+        .then((body) => {
+          const b = body !== null && typeof body === "object" ? (body as Record<string, unknown>) : null;
+          const venueId = b?.["venueId"];
+          const hardwareToken = b?.["hardwareToken"];
+          const apNodeId = b?.["apNodeId"];
+          const deviceMac = b?.["deviceMac"];
+          const eventType = b?.["eventType"];
+          const rssi = b?.["rssi"];
+          const timestamp = b?.["timestamp"];
+
+          if (
+            typeof venueId !== "string" ||
+            typeof hardwareToken !== "string" ||
+            typeof apNodeId !== "string" ||
+            apNodeId.length === 0 ||
+            typeof deviceMac !== "string" ||
+            deviceMac.length === 0 ||
+            typeof eventType !== "string" ||
+            !AP_EVENT_TYPES.has(eventType) ||
+            (eventType === "signal_reading" && typeof rssi !== "number") ||
+            (timestamp !== undefined && typeof timestamp !== "number")
+          ) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "invalid body" }));
+            return;
+          }
+
+          const venue = getVenueById(db, venueId);
+          if (!venue || !tokensMatch(hardwareToken, venue.hardwareToken)) {
+            res.writeHead(401, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "unauthorized" }));
+            return;
+          }
+
+          const hashedDeviceId = hashDeviceId(deviceMac, venue.hardwareToken);
+          const result = ingestApEvent(db, {
+            type: eventType,
+            hashedDeviceId,
+            tenantId: venue.ownerId,
+            venueId,
+            apNodeId,
+            timestamp: timestamp ?? Date.now(),
+            ...(eventType === "signal_reading" ? { rssi } : {}),
+          });
+
+          if (!result.accepted) {
+            res.writeHead(result.reason === "no_consent" ? 403 : 400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: result.reason }));
+            return;
+          }
+
+          res.writeHead(201, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ accepted: true }));
         })
         .catch(() => {
           res.writeHead(500, { "Content-Type": "application/json" });

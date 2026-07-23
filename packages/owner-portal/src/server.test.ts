@@ -542,6 +542,186 @@ test("POST /venues/:venueId/ap-nodes rejects a duplicate apNodeId within the sam
   db.close();
 });
 
+test("POST /hardware/events rejects the wrong hardware token for a real venue", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Hardware Wrong Token Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "Hardware Venue", floorWidth: 10, floorHeight: 8 });
+  createApNode(db, venue.id, { apNodeId: "ap-1", x: 0, y: 0 });
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/hardware/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venueId: venue.id,
+        hardwareToken: "not-the-real-token",
+        apNodeId: "ap-1",
+        deviceMac: "aa:bb:cc:dd:ee:ff",
+        eventType: "join",
+      }),
+    });
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("POST /hardware/events rejects an unknown venueId", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/hardware/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venueId: "no-such-venue",
+        hardwareToken: "anything",
+        apNodeId: "ap-1",
+        deviceMac: "aa:bb:cc:dd:ee:ff",
+        eventType: "join",
+      }),
+    });
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("POST /hardware/events rejects a malformed body with 400", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Hardware Malformed Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "Hardware Venue", floorWidth: 10, floorHeight: 8 });
+
+  await withServer(db, async (baseUrl) => {
+    const missingFieldsRes = await fetch(`${baseUrl}/hardware/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ venueId: venue.id, hardwareToken: venue.hardwareToken }),
+    });
+    assert.strictEqual(missingFieldsRes.status, 400);
+
+    const unknownEventTypeRes = await fetch(`${baseUrl}/hardware/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venueId: venue.id,
+        hardwareToken: venue.hardwareToken,
+        apNodeId: "ap-1",
+        deviceMac: "aa:bb:cc:dd:ee:ff",
+        eventType: "not-a-real-type",
+      }),
+    });
+    assert.strictEqual(unknownEventTypeRes.status, 400);
+
+    const missingRssiRes = await fetch(`${baseUrl}/hardware/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venueId: venue.id,
+        hardwareToken: venue.hardwareToken,
+        apNodeId: "ap-1",
+        deviceMac: "aa:bb:cc:dd:ee:ff",
+        eventType: "signal_reading",
+      }),
+    });
+    assert.strictEqual(missingRssiRes.status, 400);
+  });
+  db.close();
+});
+
+test("POST /hardware/events rejects a device with no consent grant, same reason every other ingestion path uses", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Hardware No Consent Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "Hardware Venue", floorWidth: 10, floorHeight: 8 });
+  createApNode(db, venue.id, { apNodeId: "ap-1", x: 0, y: 0 });
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/hardware/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venueId: venue.id,
+        hardwareToken: venue.hardwareToken,
+        apNodeId: "ap-1",
+        deviceMac: "aa:bb:cc:dd:ee:ff",
+        eventType: "join",
+      }),
+    });
+    assert.strictEqual(res.status, 403);
+    const body = (await res.json()) as { error: string };
+    assert.strictEqual(body.error, "no_consent");
+  });
+  db.close();
+});
+
+test("POST /hardware/events accepts join/signal_reading/leave for a consented device, visible through the owner's existing endpoints", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Hardware Accept Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "Hardware Venue", floorWidth: 10, floorHeight: 8 });
+  createApNode(db, venue.id, { apNodeId: "ap-1", x: 0, y: 0 });
+  const ownerToken = createSession(db, owner.id, Date.now(), 60_000);
+
+  const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", venue.hardwareToken);
+  recordConsentGrant(db, { tenantId: owner.id, venueId: venue.id, hashedDeviceId, termsVersion: "v1" });
+
+  await withServer(db, async (baseUrl) => {
+    async function sendEvent(body: Record<string, unknown>) {
+      return fetch(`${baseUrl}/hardware/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ venueId: venue.id, hardwareToken: venue.hardwareToken, apNodeId: "ap-1", deviceMac: "aa:bb:cc:dd:ee:ff", ...body }),
+      });
+    }
+
+    const joinRes = await sendEvent({ eventType: "join" });
+    assert.strictEqual(joinRes.status, 201);
+
+    const signalRes = await sendEvent({ eventType: "signal_reading", rssi: -55 });
+    assert.strictEqual(signalRes.status, 201);
+
+    const leaveRes = await sendEvent({ eventType: "leave" });
+    assert.strictEqual(leaveRes.status, 201);
+
+    const statsRes = await fetch(`${baseUrl}/venues/${venue.id}/return-visit-stats`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+    });
+    const stats = (await statsRes.json()) as { newDeviceCount: number };
+    assert.strictEqual(stats.newDeviceCount, 1, "the join/leave pair must be visible through the owner's own dashboard endpoint");
+  });
+  db.close();
+});
+
+test("POST /hardware/events: the same raw MAC always hashes to the same hashedDeviceId (return-visit continuity)", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Hardware Continuity Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "Hardware Venue", floorWidth: 10, floorHeight: 8 });
+  createApNode(db, venue.id, { apNodeId: "ap-1", x: 0, y: 0 });
+
+  const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", venue.hardwareToken);
+  recordConsentGrant(db, { tenantId: owner.id, venueId: venue.id, hashedDeviceId, termsVersion: "v1" });
+
+  await withServer(db, async (baseUrl) => {
+    for (const eventType of ["join", "leave"]) {
+      const res = await fetch(`${baseUrl}/hardware/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          venueId: venue.id,
+          hardwareToken: venue.hardwareToken,
+          apNodeId: "ap-1",
+          deviceMac: "aa:bb:cc:dd:ee:ff",
+          eventType,
+        }),
+      });
+      assert.strictEqual(res.status, 201, `${eventType} must be accepted - consent was granted for the exact hash this endpoint computes`);
+    }
+  });
+
+  const rows = db.prepare("SELECT DISTINCT hashed_device_id FROM ap_events WHERE venue_id = ?").all(venue.id) as Array<{
+    hashed_device_id: string;
+  }>;
+  assert.strictEqual(rows.length, 1, "both events for the same raw MAC must store the identical hashedDeviceId");
+  assert.strictEqual(rows[0]?.hashed_device_id, hashedDeviceId);
+  db.close();
+});
+
 test("the calibration endpoint rejects a request with no token", async () => {
   const db = openDatabase(":memory:");
   const owner = createOwner(db, "No Token Owner");
