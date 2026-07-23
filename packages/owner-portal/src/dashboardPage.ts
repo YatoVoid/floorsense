@@ -316,6 +316,38 @@ export function buildVenueCreationPayload(input: {
   return { valid: true, payload: { name: input.name, floorWidth, floorHeight } };
 }
 
+/** cents 0 renders as "Free"; otherwise dollars per month, two decimal places. */
+export function formatPriceCents(cents: number): string {
+  return cents === 0 ? "Free" : `$${(cents / 100).toFixed(2)}/mo`;
+}
+
+export interface TierPricing {
+  basic: number;
+  standard: number;
+  premium: number;
+}
+
+/** Radio-button tier picker for the register form. Prices come from the server so they can never drift from what registration actually charges. */
+export function renderTierPicker(pricing: TierPricing | null): string {
+  if (!pricing) {
+    return '<p class="no-data">Loading plans...</p>';
+  }
+
+  const tiers: Array<{ id: "basic" | "standard" | "premium"; label: string }> = [
+    { id: "basic", label: "Basic" },
+    { id: "standard", label: "Standard" },
+    { id: "premium", label: "Premium" },
+  ];
+
+  return tiers
+    .map(
+      (tier, index) =>
+        `<label><input type="radio" name="tier-picker" value="${tier.id}" ${index === 0 ? "checked" : ""} /> ` +
+        `${tier.label} - ${escapeHtml(formatPriceCents(pricing[tier.id]))}</label>`
+    )
+    .join(" ");
+}
+
 /**
  * The page shell. The inline script embeds the tested functions above via
  * toString(), so the browser runs the same code the tests cover. The
@@ -335,6 +367,8 @@ export function renderDashboardPage(): string {
     buildVenueCreationPayload.toString(),
     renderApNodePlacementForm.toString(),
     buildApNodeCreationPayload.toString(),
+    formatPriceCents.toString(),
+    renderTierPicker.toString(),
   ].join("\n\n");
 
   return `<!doctype html>
@@ -366,8 +400,10 @@ export function renderDashboardPage(): string {
   <form id="login-form">
     <input id="login-name" type="text" placeholder="Owner name" required />
     <input id="login-password" type="password" placeholder="Password" required />
+    <div id="tier-picker-container" style="display:none;"></div>
     <button id="login-submit-button" type="submit">Log in</button>
   </form>
+  <p id="payment-confirmation" class="success"></p>
   <p><a href="#" id="auth-mode-toggle">New business? Register here</a></p>
   <p id="login-error" style="color:#a00;"></p>
 
@@ -400,6 +436,11 @@ ${embeddedFunctions}
     var markedPosition = null;
     var addingApNode = false;
     var pendingApNodePosition = null;
+    var tierPricing = null;
+
+    fetch("/billing/pricing")
+      .then(function (res) { return res.json(); })
+      .then(function (pricing) { tierPricing = pricing; });
 
     function authHeaders() {
       var token = localStorage.getItem(TOKEN_KEY);
@@ -592,6 +633,11 @@ ${embeddedFunctions}
       document.getElementById("login-submit-button").textContent = isRegisterMode ? "Register" : "Log in";
       e.target.textContent = isRegisterMode ? "Already registered? Log in here" : "New business? Register here";
       document.getElementById("login-error").textContent = "";
+      var tierPickerContainer = document.getElementById("tier-picker-container");
+      tierPickerContainer.style.display = isRegisterMode ? "block" : "none";
+      if (isRegisterMode) {
+        tierPickerContainer.innerHTML = renderTierPicker(tierPricing);
+      }
     });
 
     document.getElementById("login-form").addEventListener("submit", function (e) {
@@ -599,7 +645,9 @@ ${embeddedFunctions}
       var name = document.getElementById("login-name").value;
       var password = document.getElementById("login-password").value;
       var endpoint = isRegisterMode ? "/auth/register" : "/auth/login";
-      var payload = isRegisterMode ? { name: name, password: password, tier: "basic" } : { name: name, password: password };
+      var selectedTierInput = document.querySelector('input[name="tier-picker"]:checked');
+      var selectedTier = selectedTierInput ? selectedTierInput.value : "basic";
+      var payload = isRegisterMode ? { name: name, password: password, tier: selectedTier } : { name: name, password: password };
       fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -614,6 +662,11 @@ ${embeddedFunctions}
           }
           localStorage.setItem(TOKEN_KEY, result.body.token);
           document.getElementById("login-error").textContent = "";
+          if (isRegisterMode && tierPricing && result.body.tier) {
+            var price = formatPriceCents(tierPricing[result.body.tier]);
+            document.getElementById("payment-confirmation").textContent =
+              "Payment simulated: " + price + " - " + result.body.tier + " plan active.";
+          }
           showApp();
           loadVenues();
         });

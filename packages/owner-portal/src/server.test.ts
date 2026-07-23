@@ -40,6 +40,19 @@ test("GET / serves the dashboard page as HTML containing the login form", async 
   db.close();
 });
 
+test("GET /billing/pricing returns the real tier prices with no auth required", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/billing/pricing`);
+    assert.strictEqual(res.status, 200);
+    const pricing = (await res.json()) as { basic: number; standard: number; premium: number };
+    assert.strictEqual(pricing.basic, 0);
+    assert.ok(pricing.standard > 0);
+    assert.ok(pricing.premium > pricing.standard);
+  });
+  db.close();
+});
+
 test("POST /auth/login with correct credentials returns a usable token", async () => {
   const db = openDatabase(":memory:");
   createOwnerWithPassword(db, "Login Test Owner", "correct-password");

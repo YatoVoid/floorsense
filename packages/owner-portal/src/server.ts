@@ -20,6 +20,7 @@ import {
   recordBillingTransaction,
   getBillingHistory,
   simulateMonthlyBillingCharge,
+  TIER_PRICING,
   type SubscriptionTier,
 } from "@floorsense/backend";
 import { renderDashboardPage } from "./dashboardPage.ts";
@@ -140,6 +141,13 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
           res.writeHead(401, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "invalid credentials" }));
         });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/billing/pricing") {
+      // Public: a prospective owner needs prices before they have an account.
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(TIER_PRICING));
       return;
     }
 

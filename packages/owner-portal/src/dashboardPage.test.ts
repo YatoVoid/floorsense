@@ -15,6 +15,8 @@ import {
   buildVenueCreationPayload,
   renderApNodePlacementForm,
   buildApNodeCreationPayload,
+  formatPriceCents,
+  renderTierPicker,
 } from "./dashboardPage.ts";
 
 test("escapeHtml escapes all five special characters", () => {
@@ -284,6 +286,29 @@ test("buildApNodeCreationPayload: a non-finite position is rejected", () => {
   assert.strictEqual(result.valid, false);
 });
 
+test("formatPriceCents: zero renders as Free, non-zero renders as dollars per month", () => {
+  assert.strictEqual(formatPriceCents(0), "Free");
+  assert.strictEqual(formatPriceCents(1900), "$19.00/mo");
+  assert.strictEqual(formatPriceCents(4900), "$49.00/mo");
+});
+
+test("renderTierPicker: with no pricing yet, shows a loading message and no radio inputs", () => {
+  const html = renderTierPicker(null);
+  assert.doesNotMatch(html, /<input/);
+  assert.match(html, /Loading/);
+});
+
+test("renderTierPicker: with real pricing, renders one radio per tier with its formatted price, basic checked by default", () => {
+  const html = renderTierPicker({ basic: 0, standard: 1900, premium: 4900 });
+  assert.match(html, /value="basic"[^>]*checked/);
+  assert.match(html, /value="standard"/);
+  assert.doesNotMatch(html, /value="standard"[^>]*checked/);
+  assert.match(html, /value="premium"/);
+  assert.match(html, /Free/);
+  assert.match(html, /\$19\.00\/mo/);
+  assert.match(html, /\$49\.00\/mo/);
+});
+
 test("renderDashboardPage: produces a page with login form markup, a register toggle, an Add AP node control, and its embedded <script> parses as valid JS", () => {
   const html = renderDashboardPage();
   assert.match(html, /<form id="login-form">/);
@@ -309,6 +334,10 @@ test("renderDashboardPage: produces a page with login form markup, a register to
   assert.match(scriptBody, /function buildVenueCreationPayload/);
   assert.match(scriptBody, /function renderApNodePlacementForm/);
   assert.match(scriptBody, /function buildApNodeCreationPayload/);
+  assert.match(scriptBody, /function formatPriceCents/);
+  assert.match(scriptBody, /function renderTierPicker/);
+  assert.match(html, /id="tier-picker-container"/);
+  assert.match(html, /id="payment-confirmation"/);
 
   // Just parses the source, doesn't run it, so missing browser globals are fine here.
   assert.doesNotThrow(() => new Function(scriptBody), "the embedded page script must be syntactically valid JS");
