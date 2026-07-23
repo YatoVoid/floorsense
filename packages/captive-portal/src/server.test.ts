@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import { test } from "node:test";
 import type { AddressInfo } from "node:net";
+import { hashDeviceId } from "@floorsense/shared";
 import { openDatabase, createOwner, createVenue, hasConsent } from "@floorsense/backend";
 import { createCaptivePortalServer } from "./server.ts";
 
@@ -12,7 +13,7 @@ function setupTenant(db: ReturnType<typeof openDatabase>) {
 
 async function withServer(
   db: ReturnType<typeof openDatabase>,
-  config: { tenantId: string; venueId: string },
+  config: { tenantId: string; venueId: string; deviceIdSalt?: string },
   fn: (baseUrl: string) => Promise<void>
 ) {
   const server = createCaptivePortalServer(db, {
@@ -20,6 +21,7 @@ async function withServer(
     venueId: config.venueId,
     venueName: "Portal Test Venue",
     termsVersion: "v1",
+    deviceIdSalt: config.deviceIdSalt,
   });
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const address = server.address() as AddressInfo;
@@ -40,6 +42,36 @@ test("GET / serves the splash page containing the venue name", async () => {
     const html = await res.text();
     assert.match(html, /Portal Test Venue/);
     assert.match(html, /abc123/);
+  });
+  db.close();
+});
+
+test("GET /?rawMac=... hashes the raw MAC server-side with deviceIdSalt, for real AP hardware that never computes the hash itself", async () => {
+  const db = openDatabase(":memory:");
+  const { tenantId, venueId } = setupTenant(db);
+  const salt = "a-real-venue-hardware-token";
+
+  await withServer(db, { tenantId, venueId, deviceIdSalt: salt }, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/?rawMac=aa:bb:cc:dd:ee:ff`);
+    assert.strictEqual(res.status, 200);
+    const html = await res.text();
+
+    const expectedHash = hashDeviceId("aa:bb:cc:dd:ee:ff", salt);
+    assert.match(html, new RegExp(expectedHash), "the page must embed the SERVER-COMPUTED hash, not the raw MAC");
+    assert.doesNotMatch(html, /aa:bb:cc:dd:ee:ff/, "the raw MAC must never appear in the rendered page");
+  });
+  db.close();
+});
+
+test("GET /?rawMac=... without a configured deviceIdSalt falls back to an empty hashedDeviceId, not an unsalted hash", async () => {
+  const db = openDatabase(":memory:");
+  const { tenantId, venueId } = setupTenant(db);
+
+  await withServer(db, { tenantId, venueId }, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/?rawMac=aa:bb:cc:dd:ee:ff`);
+    assert.strictEqual(res.status, 200);
+    const html = await res.text();
+    assert.doesNotMatch(html, /aa:bb:cc:dd:ee:ff/, "the raw MAC must never leak into the page even without a salt configured");
   });
   db.close();
 });

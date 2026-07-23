@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { DatabaseSync } from "node:sqlite";
+import { hashDeviceId } from "@floorsense/shared";
 import { recordConsentGrant } from "@floorsense/backend";
 import { renderSplashPage } from "./splashPage.ts";
 
@@ -8,6 +9,8 @@ export interface CaptivePortalConfig {
   venueId: string;
   venueName: string;
   termsVersion: string;
+  /** Optional: when set, a `rawMac` query param is hashed with this salt server-side (real AP hardware redirects with the raw MAC, never computing the hash itself - matches the venue's hardwareToken in a real deployment). Without it, only the existing already-hashed `deviceId` param works. */
+  deviceIdSalt?: string;
 }
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -32,7 +35,11 @@ export function createCaptivePortalServer(db: DatabaseSync, config: CaptivePorta
     const url = new URL(req.url ?? "/", "http://localhost");
 
     if (req.method === "GET" && url.pathname === "/") {
-      const hashedDeviceId = url.searchParams.get("deviceId") ?? "";
+      const rawMac = url.searchParams.get("rawMac");
+      const hashedDeviceId =
+        rawMac !== null && config.deviceIdSalt !== undefined
+          ? hashDeviceId(rawMac, config.deviceIdSalt)
+          : (url.searchParams.get("deviceId") ?? "");
       const html = renderSplashPage({
         venueName: config.venueName,
         hashedDeviceId,
