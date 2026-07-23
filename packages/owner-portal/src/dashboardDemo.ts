@@ -14,6 +14,7 @@ import { createOwnerPortalServer } from "./server.ts";
 export interface DashboardDemoResult {
   dashboardPageStatus: number;
   dashboardPageIsHtml: boolean;
+  dashboardPageHasVisualPolish: boolean;
   premiumOwner: { venueCount: number; heatmapStatus: number; statsPerDeviceCount: number };
   basicOwner: { venueCount: number; heatmapStatus: number; statsPerDeviceCount: number };
 }
@@ -58,7 +59,9 @@ export async function runDashboardDemo(): Promise<DashboardDemoResult> {
     const pageRes = await fetch(baseUrl);
     const dashboardPageStatus = pageRes.status;
     const dashboardPageIsHtml = (pageRes.headers.get("content-type") ?? "").includes("text/html");
-    await pageRes.text();
+    const pageHtml = await pageRes.text();
+    const dashboardPageHasVisualPolish =
+      pageHtml.includes("section-card") && pageHtml.includes("btn-primary") && pageHtml.includes("btn-secondary");
 
     async function checkOwner(name: string) {
       const loginRes = await fetch(`${baseUrl}/auth/login`, {
@@ -88,7 +91,7 @@ export async function runDashboardDemo(): Promise<DashboardDemoResult> {
     const premiumOwner = await checkOwner("Dashboard Demo Premium Owner");
     const basicOwner = await checkOwner("Dashboard Demo Basic Owner");
 
-    return { dashboardPageStatus, dashboardPageIsHtml, premiumOwner, basicOwner };
+    return { dashboardPageStatus, dashboardPageIsHtml, dashboardPageHasVisualPolish, premiumOwner, basicOwner };
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     db.close();
@@ -98,7 +101,7 @@ export async function runDashboardDemo(): Promise<DashboardDemoResult> {
 /** Run directly: `node src/dashboardDemo.ts` */
 if (import.meta.url === `file://${process.argv[1]}`) {
   const result = await runDashboardDemo();
-  console.log(`GET / status=${result.dashboardPageStatus}, isHtml=${result.dashboardPageIsHtml}`);
+  console.log(`GET / status=${result.dashboardPageStatus}, isHtml=${result.dashboardPageIsHtml}, hasVisualPolish=${result.dashboardPageHasVisualPolish}`);
   console.log(`Premium owner: ${JSON.stringify(result.premiumOwner)}`);
   console.log(`Basic owner: ${JSON.stringify(result.basicOwner)}`);
   console.log("NOTE: this proves the data contract only. Opening the page in a real browser is still a manual step.");

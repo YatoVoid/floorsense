@@ -7,6 +7,7 @@ test("the dashboard's data contract holds end-to-end for both a premium and a ba
 
   assert.strictEqual(result.dashboardPageStatus, 200);
   assert.strictEqual(result.dashboardPageIsHtml, true);
+  assert.strictEqual(result.dashboardPageHasVisualPolish, true, "served page must contain the section-card/button styling classes");
 
   assert.strictEqual(result.premiumOwner.venueCount, 1);
   assert.strictEqual(result.premiumOwner.heatmapStatus, 200);
