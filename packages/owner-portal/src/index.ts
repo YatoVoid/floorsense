@@ -43,3 +43,5 @@ export { runApNodeCreationDemo } from "./apNodeCreationDemo.ts";
 export type { ApNodeCreationDemoResult } from "./apNodeCreationDemo.ts";
 export { runBillingDemo } from "./billingDemo.ts";
 export type { BillingDemoResult } from "./billingDemo.ts";
+export { runHardwareIngestDemo } from "./hardwareIngestDemo.ts";
+export type { HardwareIngestDemoResult } from "./hardwareIngestDemo.ts";
