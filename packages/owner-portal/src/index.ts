@@ -21,6 +21,7 @@ export {
   buildApNodeCreationPayload,
   formatPriceCents,
   renderTierPicker,
+  renderBillingSection,
 } from "./dashboardPage.ts";
 export type {
   HeatmapUpgradeRequired,
@@ -29,6 +30,7 @@ export type {
   VenueCreationValidationResult,
   ApNodeCreationValidationResult,
   TierPricing,
+  BillingHistoryEntry,
 } from "./dashboardPage.ts";
 export { runDashboardDemo } from "./dashboardDemo.ts";
 export type { DashboardDemoResult } from "./dashboardDemo.ts";

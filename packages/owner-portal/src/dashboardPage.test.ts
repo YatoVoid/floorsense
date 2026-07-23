@@ -17,6 +17,7 @@ import {
   buildApNodeCreationPayload,
   formatPriceCents,
   renderTierPicker,
+  renderBillingSection,
 } from "./dashboardPage.ts";
 
 test("escapeHtml escapes all five special characters", () => {
@@ -309,6 +310,30 @@ test("renderTierPicker: with real pricing, renders one radio per tier with its f
   assert.match(html, /\$49\.00\/mo/);
 });
 
+test("renderBillingSection: with no history, shows a no-data message and no table", () => {
+  const html = renderBillingSection([]);
+  assert.doesNotMatch(html, /<table/);
+  assert.match(html, /no-data/);
+});
+
+test("renderBillingSection: shows the current plan from the newest transaction, a row per transaction, and a simulate-charge button", () => {
+  const html = renderBillingSection([
+    { tier: "standard", kind: "monthly", amountCents: 1900, chargedAt: 2000 },
+    { tier: "standard", kind: "signup", amountCents: 1900, chargedAt: 1000 },
+  ]);
+  assert.match(html, /Current plan:.*standard/);
+  assert.match(html, /<td>monthly<\/td>/);
+  assert.match(html, /<td>signup<\/td>/);
+  assert.match(html, /\$19\.00\/mo/);
+  assert.match(html, /id="simulate-monthly-charge-button"/);
+});
+
+test("renderBillingSection escapes any HTML-special characters in tier/kind fields", () => {
+  const html = renderBillingSection([{ tier: "<b>x</b>", kind: "<i>y</i>", amountCents: 0, chargedAt: 1000 }]);
+  assert.doesNotMatch(html, /<b>x<\/b>/);
+  assert.doesNotMatch(html, /<i>y<\/i>/);
+});
+
 test("renderDashboardPage: produces a page with login form markup, a register toggle, an Add AP node control, and its embedded <script> parses as valid JS", () => {
   const html = renderDashboardPage();
   assert.match(html, /<form id="login-form">/);
@@ -336,8 +361,10 @@ test("renderDashboardPage: produces a page with login form markup, a register to
   assert.match(scriptBody, /function buildApNodeCreationPayload/);
   assert.match(scriptBody, /function formatPriceCents/);
   assert.match(scriptBody, /function renderTierPicker/);
+  assert.match(scriptBody, /function renderBillingSection/);
   assert.match(html, /id="tier-picker-container"/);
   assert.match(html, /id="payment-confirmation"/);
+  assert.match(html, /id="billing-section-container"/);
 
   // Just parses the source, doesn't run it, so missing browser globals are fine here.
   assert.doesNotThrow(() => new Function(scriptBody), "the embedded page script must be syntactically valid JS");

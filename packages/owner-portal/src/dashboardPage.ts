@@ -348,6 +348,38 @@ export function renderTierPicker(pricing: TierPricing | null): string {
     .join(" ");
 }
 
+export interface BillingHistoryEntry {
+  tier: string;
+  kind: string;
+  amountCents: number;
+  chargedAt: number;
+}
+
+/** Current plan is read off the newest transaction - there's no separate upgrade/downgrade flow, so it's always accurate. */
+export function renderBillingSection(history: BillingHistoryEntry[]): string {
+  if (history.length === 0) {
+    return '<p class="no-data">No billing history yet.</p>';
+  }
+
+  const currentTier = history[0]!.tier;
+  const rows = history
+    .map((entry) => {
+      const date = escapeHtml(new Date(entry.chargedAt).toISOString().slice(0, 10));
+      const kind = escapeHtml(entry.kind);
+      const amount = escapeHtml(formatPriceCents(entry.amountCents));
+      return `<tr><td>${date}</td><td>${kind}</td><td>${amount}</td></tr>`;
+    })
+    .join("");
+
+  return (
+    `<p>Current plan: <strong>${escapeHtml(currentTier)}</strong></p>` +
+    "<table><thead><tr><th>Date</th><th>Type</th><th>Amount</th></tr></thead><tbody>" +
+    rows +
+    "</tbody></table>" +
+    '<button type="button" id="simulate-monthly-charge-button">Simulate next monthly charge</button>'
+  );
+}
+
 /**
  * The page shell. The inline script embeds the tested functions above via
  * toString(), so the browser runs the same code the tests cover. The
@@ -369,6 +401,7 @@ export function renderDashboardPage(): string {
     buildApNodeCreationPayload.toString(),
     formatPriceCents.toString(),
     renderTierPicker.toString(),
+    renderBillingSection.toString(),
   ].join("\n\n");
 
   return `<!doctype html>
@@ -409,6 +442,8 @@ export function renderDashboardPage(): string {
 
   <div id="app-section">
     <button id="logout-button">Log out</button>
+    <h2>Plan &amp; Billing</h2>
+    <div id="billing-section-container"></div>
     <p>
       <label for="venue-select">Venue:</label>
       <select id="venue-select"></select>
@@ -450,6 +485,22 @@ ${embeddedFunctions}
     function showApp() {
       document.getElementById("login-form").style.display = "none";
       document.getElementById("app-section").style.display = "block";
+      loadBillingSection();
+    }
+
+    function loadBillingSection() {
+      fetch("/billing/history", { headers: authHeaders() })
+        .then(function (res) { return res.json(); })
+        .then(function (history) {
+          document.getElementById("billing-section-container").innerHTML = renderBillingSection(history);
+          var simulateButton = document.getElementById("simulate-monthly-charge-button");
+          if (simulateButton) {
+            simulateButton.addEventListener("click", function () {
+              fetch("/billing/simulate-monthly-charge", { method: "POST", headers: authHeaders() })
+                .then(function () { loadBillingSection(); });
+            });
+          }
+        });
     }
 
     function loadVenues() {
