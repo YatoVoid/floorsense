@@ -9,6 +9,7 @@ test("tier selection, simulated signup payment, the Wali override, and simulated
   assert.strictEqual(byTier.basic, 0);
   assert.ok(byTier.standard > 0);
   assert.ok(byTier.premium > byTier.standard);
+  assert.strictEqual(result.pricingEndpointMatchesSignups, true, "the public pricing endpoint must match what registration actually charges");
 
   assert.strictEqual(result.waliEffectiveTier, "premium", "Wali must get premium even when requesting basic");
   assert.strictEqual(result.waliSignupAmountCents, byTier.premium, "Wali's charge must match the real premium price");

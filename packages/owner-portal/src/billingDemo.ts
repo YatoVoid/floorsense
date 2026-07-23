@@ -9,13 +9,20 @@ interface TierSignupResult {
 
 export interface BillingDemoResult {
   signups: TierSignupResult[];
+  pricingEndpointMatchesSignups: boolean;
   waliEffectiveTier: string;
   waliSignupAmountCents: number;
   monthlyChargeKind: string;
   historyCountAfterMonthlyCharge: number;
 }
 
-/** Proves tier selection, simulated signup payment, the Wali test override, and simulated monthly billing all work against a real running server. */
+/**
+ * Proves the full contract the dashboard's tier picker, payment
+ * confirmation, and Plan & Billing section rely on: the public pricing
+ * endpoint matches what registration actually charges, tier selection,
+ * simulated signup payment, the Wali test override, and simulated
+ * monthly billing all work against a real running server.
+ */
 export async function runBillingDemo(): Promise<BillingDemoResult> {
   const db = openDatabase(":memory:");
   const server = createOwnerPortalServer(db);
@@ -24,6 +31,9 @@ export async function runBillingDemo(): Promise<BillingDemoResult> {
   try {
     const address = server.address() as AddressInfo;
     const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const pricingRes = await fetch(`${baseUrl}/billing/pricing`);
+    const pricing = (await pricingRes.json()) as Record<string, number>;
 
     async function register(name: string, tier: string): Promise<{ token: string; tier: string }> {
       const res = await fetch(`${baseUrl}/auth/register`, {
@@ -47,6 +57,8 @@ export async function runBillingDemo(): Promise<BillingDemoResult> {
       signups.push({ tier, amountCents: history[0]?.amountCents ?? -1 });
     }
 
+    const pricingEndpointMatchesSignups = signups.every((signup) => pricing[signup.tier] === signup.amountCents);
+
     const wali = await register("Wali", "basic");
     const waliHistory = await historyFor(wali.token);
 
@@ -60,6 +72,7 @@ export async function runBillingDemo(): Promise<BillingDemoResult> {
 
     return {
       signups,
+      pricingEndpointMatchesSignups,
       waliEffectiveTier: wali.tier,
       waliSignupAmountCents: waliHistory[0]?.amountCents ?? -1,
       monthlyChargeKind: charge.kind,
@@ -77,6 +90,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (const signup of result.signups) {
     console.log(`${signup.tier}: signup charge = ${signup.amountCents} cents`);
   }
+  console.log(`Pricing endpoint matches signup charges: ${result.pricingEndpointMatchesSignups}`);
   console.log(`Wali override: effective tier = ${result.waliEffectiveTier}, charge = ${result.waliSignupAmountCents} cents (requested basic)`);
   console.log(`Monthly charge kind: ${result.monthlyChargeKind}`);
   console.log(`History count after monthly charge: ${result.historyCountAfterMonthlyCharge}`);
