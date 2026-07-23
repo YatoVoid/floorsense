@@ -15,6 +15,7 @@ import {
   getApNodesForVenue,
   createOwnerWithPassword,
   createVenue,
+  createApNode,
 } from "@floorsense/backend";
 import { renderDashboardPage } from "./dashboardPage.ts";
 
@@ -222,6 +223,49 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
       const apNodes = getApNodesForVenue(db, auth.ownerId, venueId);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(apNodes));
+      return;
+    }
+
+    if (req.method === "POST" && apNodesMatch) {
+      const venueId = apNodesMatch[1] as string;
+      const auth = resolveAuthenticatedOwnerForVenue(db, req, venueId);
+      if (!auth.ok) {
+        writeAuthFailure(res, auth.status);
+        return;
+      }
+
+      readJsonBody(req)
+        .then((body) => {
+          const b = body !== null && typeof body === "object" ? (body as Record<string, unknown>) : null;
+          const apNodeId = b?.["apNodeId"];
+          const x = b?.["x"];
+          const y = b?.["y"];
+
+          if (typeof apNodeId !== "string" || apNodeId.length === 0 || typeof x !== "number" || typeof y !== "number") {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "invalid body" }));
+            return;
+          }
+
+          let apNode;
+          try {
+            apNode = createApNode(db, venueId, { apNodeId, x, y });
+          } catch (err) {
+            if (isUniqueConstraintViolation(err)) {
+              res.writeHead(409, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "an AP node with that ID already exists in this venue" }));
+              return;
+            }
+            throw err; // some other DB error, let it surface as 500 below.
+          }
+
+          res.writeHead(201, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(apNode));
+        })
+        .catch(() => {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "internal error" }));
+        });
       return;
     }
 

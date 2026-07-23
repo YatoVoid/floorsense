@@ -275,6 +275,116 @@ test("GET /venues/:venueId/ap-nodes returns the real AP node list for the legiti
   db.close();
 });
 
+test("POST /venues/:venueId/ap-nodes rejects a request with no token", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwner(db, "AP Node Create No Token Owner");
+  const venue = createVenue(db, owner.id, { name: "AP Node Create Venue", floorWidth: 10, floorHeight: 8 });
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/ap-nodes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apNodeId: "ap-1", x: 1, y: 1 }),
+    });
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("POST /venues/:venueId/ap-nodes rejects a valid token for a different owner's venue", async () => {
+  const db = openDatabase(":memory:");
+  const ownerA = createOwnerWithPassword(db, "AP Node Create Owner A", "password-a");
+  const ownerB = createOwner(db, "AP Node Create Owner B");
+  const venueB = createVenue(db, ownerB.id, { name: "AP Node Create Venue B", floorWidth: 10, floorHeight: 8 });
+  const tokenA = createSession(db, ownerA.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venueB.id}/ap-nodes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenA}` },
+      body: JSON.stringify({ apNodeId: "ap-1", x: 1, y: 1 }),
+    });
+    assert.strictEqual(res.status, 404);
+  });
+  db.close();
+});
+
+test("POST /venues/:venueId/ap-nodes rejects a malformed body with 400", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "AP Node Create Malformed Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "AP Node Create Malformed Venue", floorWidth: 10, floorHeight: 8 });
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/ap-nodes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ apNodeId: "ap-1" }),
+    });
+    assert.strictEqual(res.status, 400);
+  });
+  db.close();
+});
+
+test("POST /venues/:venueId/ap-nodes creates a real AP node, immediately visible via GET", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "AP Node Create Legit Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "AP Node Create Legit Venue", floorWidth: 10, floorHeight: 8 });
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const createRes = await fetch(`${baseUrl}/venues/${venue.id}/ap-nodes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ apNodeId: "ap-1", x: 3, y: 4 }),
+    });
+    assert.strictEqual(createRes.status, 201);
+    const created = (await createRes.json()) as { apNodeId: string; x: number; y: number };
+    assert.strictEqual(created.apNodeId, "ap-1");
+    assert.strictEqual(created.x, 3);
+    assert.strictEqual(created.y, 4);
+
+    const listRes = await fetch(`${baseUrl}/venues/${venue.id}/ap-nodes`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const apNodes = (await listRes.json()) as Array<{ apNodeId: string }>;
+    assert.strictEqual(apNodes.length, 1);
+    assert.strictEqual(apNodes[0]?.apNodeId, "ap-1");
+  });
+  db.close();
+});
+
+test("POST /venues/:venueId/ap-nodes rejects a duplicate apNodeId within the same venue with 409, not a silent overwrite or 500", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "AP Node Duplicate Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "AP Node Duplicate Venue", floorWidth: 10, floorHeight: 8 });
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const firstRes = await fetch(`${baseUrl}/venues/${venue.id}/ap-nodes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ apNodeId: "ap-1", x: 1, y: 1 }),
+    });
+    assert.strictEqual(firstRes.status, 201);
+
+    const secondRes = await fetch(`${baseUrl}/venues/${venue.id}/ap-nodes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ apNodeId: "ap-1", x: 9, y: 9 }),
+    });
+    assert.strictEqual(secondRes.status, 409);
+  });
+
+  const rows = db.prepare("SELECT x, y FROM ap_nodes WHERE venue_id = ? AND ap_node_id = ?").all(venue.id, "ap-1") as Array<{
+    x: number;
+    y: number;
+  }>;
+  assert.strictEqual(rows.length, 1, "the duplicate attempt must not create a second row");
+  assert.strictEqual(rows[0]?.x, 1, "the original AP node's position must be unchanged");
+  db.close();
+});
+
 test("the calibration endpoint rejects a request with no token", async () => {
   const db = openDatabase(":memory:");
   const owner = createOwner(db, "No Token Owner");
