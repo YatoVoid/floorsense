@@ -50,4 +50,11 @@ export type {
 } from "./heatmap.ts";
 export { setOwnerTier, getOwnerTier, tierAllowsHeatmap, applyTierToReturnVisitStats } from "./tiers.ts";
 export type { SubscriptionTier } from "./tiers.ts";
+export {
+  TIER_PRICING,
+  recordBillingTransaction,
+  getBillingHistory,
+  simulateMonthlyBillingCharge,
+} from "./billing.ts";
+export type { BillingTransaction, BillingTransactionKind } from "./billing.ts";
 export { seedDemoData } from "./seed.ts";

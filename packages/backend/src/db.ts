@@ -94,6 +94,19 @@ CREATE TABLE IF NOT EXISTS venue_calibration_profiles (
   fitted_at INTEGER NOT NULL,
   PRIMARY KEY (tenant_id, venue_id)
 );
+
+CREATE TABLE IF NOT EXISTS billing_transactions (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES owners(id),
+  tier TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  charged_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_billing_transactions_owner
+  ON billing_transactions (owner_id, charged_at);
 `;
 
 /** Safe to call repeatedly, every statement is CREATE IF NOT EXISTS. */
