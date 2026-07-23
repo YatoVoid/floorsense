@@ -21,8 +21,27 @@ join/leave/signal-strength events to the FloorSense backend
 
 You'll need a real FloorSense backend and captive-portal server
 already running somewhere reachable on the same network (a laptop or
-Raspberry Pi - see the repo's main `README.md` for how to start them).
-This firmware is the AP node; it is not a replacement for those.
+Raspberry Pi). This firmware is the AP node; it is not a replacement
+for those. **Do this part first, before touching the ESP32** - the
+main `README.md`'s "Testing with a real ESP32" section has the exact
+commands, summarized here:
+
+1. Start the owner-portal server (repo root: see the main README's
+   "Try the owner dashboard" command) on a LAN-reachable address.
+2. On its dashboard: register, create a venue, add an AP node.
+3. Get that venue's `id` and `hardwareToken` from `GET /venues`.
+4. Start the REAL captive-portal server for that venue (not the demo
+   scripts in `packages/captive-portal/src/*Demo.ts` - those use an
+   in-memory database and won't share data with the dashboard):
+   ```bash
+   node packages/captive-portal/src/startRealServer.ts <venueId>
+   ```
+   This exits with a clear error if `<venueId>` doesn't exist, rather
+   than starting a broken server silently.
+
+Only once both of those are running and you have the venue's real
+`id`/`hardwareToken` should you move on to configuring and flashing
+the ESP32 below.
 
 ## Requirements
 

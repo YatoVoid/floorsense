@@ -115,3 +115,32 @@ Real AP nodes (including ESP32 units) report presence events to
 `hardwareToken` (visible via `GET /venues` once logged in as that
 venue's owner) - see `docs/architecture.md`'s "Real hardware
 ingestion" section for the exact contract.
+
+### Testing with a real ESP32
+
+Full sequence, start to finish - `firmware/esp32-ap-node/README.md`
+has the same steps with more detail on the firmware side:
+
+1. Start the owner-portal server (the "Try the owner dashboard"
+   command above), reachable at your machine's LAN IP, not just
+   `localhost` - e.g. `http://192.168.4.2:3000`.
+2. On the dashboard: register, pick a plan, create a venue, and add an
+   AP node (its `apNodeId` is whatever you type into "Add AP node").
+3. Note the venue's `id` and `hardwareToken` - both are in the
+   response from `GET /venues` (open your browser's dev tools Network
+   tab while the dashboard loads, or `curl` it with your session
+   token).
+4. Start a REAL (not demo) captive-portal server for that specific
+   venue, sharing the same persistent database:
+   ```bash
+   node packages/captive-portal/src/startRealServer.ts <venueId>
+   ```
+   This listens on port 3001 by default (override with a third
+   argument) and exits with a clear error if `<venueId>` doesn't
+   exist - it won't silently start misconfigured.
+5. Edit `firmware/esp32-ap-node/esp32_ap_node.ino`'s config block:
+   `BACKEND_URL` = step 1's address, `CONSENT_PORTAL_URL` = step 4's
+   address, `VENUE_ID`/`HARDWARE_TOKEN` = step 3's values,
+   `AP_NODE_ID` = step 2's AP node.
+6. Flash the ESP32, join its WiFi network from a phone, accept
+   consent, and watch the dashboard's heatmap/stats for that venue.
