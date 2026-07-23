@@ -17,6 +17,8 @@ export interface RssiReading {
 export interface CalibrationProfile {
   referenceRssiAt1m: number;
   pathLossExponent: number;
+  /** Per-AP-node override for referenceRssiAt1m, accounting for real radios' transmit-power/antenna differences. Falls back to referenceRssiAt1m when an AP node isn't present here. */
+  perApNodeReferenceRssi?: Record<string, number>;
 }
 
 export type PositionEstimate =
@@ -24,9 +26,11 @@ export type PositionEstimate =
   | { confidence: "weighted-centroid"; x: number; y: number; apNodeIdsUsed: string[] }
   | { confidence: "no-data" };
 
-/** Inverts the log-distance path-loss formula to recover distance from RSSI. */
-export function rssiToDistance(rssi: number, profile: CalibrationProfile): number {
-  const exponent = (profile.referenceRssiAt1m - rssi) / (10 * profile.pathLossExponent);
+/** Inverts the log-distance path-loss formula to recover distance from RSSI. apNodeId picks a per-AP reference RSSI when the profile has one, else falls back to the shared value. */
+export function rssiToDistance(rssi: number, profile: CalibrationProfile, apNodeId?: string): number {
+  const referenceRssiAt1m =
+    (apNodeId !== undefined ? profile.perApNodeReferenceRssi?.[apNodeId] : undefined) ?? profile.referenceRssiAt1m;
+  const exponent = (referenceRssiAt1m - rssi) / (10 * profile.pathLossExponent);
   return Math.pow(10, exponent);
 }
 
@@ -47,7 +51,12 @@ function matchReadings(
   for (const reading of readings) {
     const node = byId.get(reading.apNodeId);
     if (!node) continue;
-    matched.push({ apNodeId: node.apNodeId, x: node.x, y: node.y, distance: rssiToDistance(reading.rssi, profile) });
+    matched.push({
+      apNodeId: node.apNodeId,
+      x: node.x,
+      y: node.y,
+      distance: rssiToDistance(reading.rssi, profile, node.apNodeId),
+    });
   }
   return matched;
 }

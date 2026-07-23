@@ -24,6 +24,23 @@ test("rssiToDistance is monotonic: weaker (more negative) RSSI implies greater d
   assert.ok(far > near);
 });
 
+test("rssiToDistance uses a per-AP-node reference RSSI override when present, ignoring the shared value for that AP", () => {
+  const profile: CalibrationProfile = {
+    referenceRssiAt1m: -40,
+    pathLossExponent: 2.7,
+    perApNodeReferenceRssi: { "strong-radio": -30 },
+  };
+
+  // At the AP's own reference RSSI, distance must be exactly 1m, using ITS OWN intercept, not the shared -40.
+  assert.ok(Math.abs(rssiToDistance(-30, profile, "strong-radio") - 1) < 1e-9);
+
+  // An AP node with no override still uses the shared value.
+  assert.ok(Math.abs(rssiToDistance(-40, profile, "no-override-radio") - 1) < 1e-9);
+
+  // No apNodeId at all still uses the shared value (backward-compatible 2-argument call).
+  assert.ok(Math.abs(rssiToDistance(-40, profile) - 1) < 1e-9);
+});
+
 test("trilateration recovers a known point from 3 noiseless AP-node readings", () => {
   const apNodes: ApNodePosition[] = [
     { apNodeId: "ap-1", x: 0, y: 0 },

@@ -96,6 +96,16 @@ CREATE TABLE IF NOT EXISTS venue_calibration_profiles (
   PRIMARY KEY (tenant_id, venue_id)
 );
 
+CREATE TABLE IF NOT EXISTS venue_calibration_ap_profiles (
+  tenant_id TEXT NOT NULL,
+  venue_id TEXT NOT NULL,
+  ap_node_id TEXT NOT NULL,
+  reference_rssi_at_1m REAL NOT NULL,
+  sample_count INTEGER NOT NULL,
+  fitted_at INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, venue_id, ap_node_id)
+);
+
 CREATE TABLE IF NOT EXISTS billing_transactions (
   id TEXT PRIMARY KEY,
   owner_id TEXT NOT NULL REFERENCES owners(id),

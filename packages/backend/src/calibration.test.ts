@@ -8,6 +8,7 @@ import {
   getCalibrationProfile,
   DEFAULT_CALIBRATION_PROFILE,
   MIN_CALIBRATION_SAMPLES,
+  MIN_CALIBRATION_SAMPLES_PER_AP_NODE,
 } from "./calibration.ts";
 import type { CalibrationProfile } from "@floorsense/positioning";
 
@@ -113,5 +114,128 @@ test("calibration is tenant-isolated: owner A's samples and fitted profile never
 
   const fittedB = fitCalibrationProfile(db, ownerB.id, venueB.id);
   assert.strictEqual(fittedB, null);
+  db.close();
+});
+
+test("fitCalibrationProfile fits a DIFFERENT reference RSSI per AP node when their true transmit power differs, sharing one path-loss exponent", () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwner(db, "Per-AP Test Owner");
+  const venue = createVenue(db, owner.id, { name: "Per-AP Test Venue", floorWidth: 20, floorHeight: 15 });
+  const strongAp = createApNode(db, venue.id, { apNodeId: "strong-ap", x: 0, y: 0 });
+  const weakAp = createApNode(db, venue.id, { apNodeId: "weak-ap", x: 0, y: 0 });
+
+  const sharedPathLossExponent = 2.7;
+  const strongProfile: CalibrationProfile = { referenceRssiAt1m: -30, pathLossExponent: sharedPathLossExponent };
+  const weakProfile: CalibrationProfile = { referenceRssiAt1m: -50, pathLossExponent: sharedPathLossExponent };
+
+  for (const distance of [1, 2, 4, 8, 16]) {
+    recordCalibrationSample(db, {
+      tenantId: owner.id,
+      venueId: venue.id,
+      apNodeId: strongAp.apNodeId,
+      rssi: rssiAtDistance(distance, strongProfile),
+      knownX: distance,
+      knownY: 0,
+    });
+    recordCalibrationSample(db, {
+      tenantId: owner.id,
+      venueId: venue.id,
+      apNodeId: weakAp.apNodeId,
+      rssi: rssiAtDistance(distance, weakProfile),
+      knownX: distance,
+      knownY: 0,
+    });
+  }
+
+  const fitted = fitCalibrationProfile(db, owner.id, venue.id);
+  assert.ok(fitted);
+  assert.ok(fitted.perApNodeReferenceRssi, "expected per-AP-node overrides with 5 samples per AP");
+  assert.ok(
+    Math.abs(fitted.perApNodeReferenceRssi!["strong-ap"]! - strongProfile.referenceRssiAt1m) < 1e-6,
+    "the strong AP must recover ITS OWN reference RSSI, not a blended average with the weak one"
+  );
+  assert.ok(
+    Math.abs(fitted.perApNodeReferenceRssi!["weak-ap"]! - weakProfile.referenceRssiAt1m) < 1e-6,
+    "the weak AP must recover ITS OWN reference RSSI, not a blended average with the strong one"
+  );
+  db.close();
+});
+
+test("fitCalibrationProfile: an AP node below MIN_CALIBRATION_SAMPLES_PER_AP_NODE gets no per-AP override, falling back to the shared value", () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwner(db, "Sparse AP Test Owner");
+  const venue = createVenue(db, owner.id, { name: "Sparse AP Test Venue", floorWidth: 20, floorHeight: 15 });
+  const wellSampledAp = createApNode(db, venue.id, { apNodeId: "well-sampled-ap", x: 0, y: 0 });
+  const sparseAp = createApNode(db, venue.id, { apNodeId: "sparse-ap", x: 5, y: 0 });
+
+  const profile: CalibrationProfile = { referenceRssiAt1m: -40, pathLossExponent: 2.7 };
+  for (const distance of [1, 2, 4, 8, 16]) {
+    recordCalibrationSample(db, {
+      tenantId: owner.id,
+      venueId: venue.id,
+      apNodeId: wellSampledAp.apNodeId,
+      rssi: rssiAtDistance(distance, profile),
+      knownX: distance,
+      knownY: 0,
+    });
+  }
+  assert.ok(MIN_CALIBRATION_SAMPLES_PER_AP_NODE > 1, "sanity check on the exported constant");
+  recordCalibrationSample(db, {
+    tenantId: owner.id,
+    venueId: venue.id,
+    apNodeId: sparseAp.apNodeId,
+    rssi: rssiAtDistance(3, profile),
+    knownX: 8,
+    knownY: 0,
+  });
+
+  const fitted = fitCalibrationProfile(db, owner.id, venue.id);
+  assert.ok(fitted);
+  assert.ok(fitted.perApNodeReferenceRssi?.["well-sampled-ap"] !== undefined, "5 samples must be enough for its own override");
+  assert.strictEqual(
+    fitted.perApNodeReferenceRssi?.["sparse-ap"],
+    undefined,
+    "1 sample is below MIN_CALIBRATION_SAMPLES_PER_AP_NODE, so no per-AP override should exist for it"
+  );
+  db.close();
+});
+
+test("fitCalibrationProfile: a single wild outlier sample does not drag the fit away from the true values", () => {
+  const db = openDatabase(":memory:");
+  const { tenantId, venueId, apNode } = setupTenant(db);
+  const groundTruth: CalibrationProfile = { referenceRssiAt1m: -40, pathLossExponent: 2.7 };
+
+  for (const distance of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    recordCalibrationSample(db, {
+      tenantId,
+      venueId,
+      apNodeId: apNode.apNodeId,
+      rssi: rssiAtDistance(distance, groundTruth),
+      knownX: distance,
+      knownY: 0,
+    });
+  }
+  // A clearly wrong reading at a distance already well within the sampled
+  // range (not an extrapolated extreme) - e.g. a stray reflection or a
+  // mis-marked position, off by ~26dB against an expected ~-56dB at 4m.
+  recordCalibrationSample(db, {
+    tenantId,
+    venueId,
+    apNodeId: apNode.apNodeId,
+    rssi: -30,
+    knownX: 4,
+    knownY: 0,
+  });
+
+  const fitted = fitCalibrationProfile(db, tenantId, venueId);
+  assert.ok(fitted);
+  assert.ok(
+    Math.abs(fitted.referenceRssiAt1m - groundTruth.referenceRssiAt1m) < 1,
+    `expected the outlier-robust fit close to the true reference RSSI, got ${fitted.referenceRssiAt1m}`
+  );
+  assert.ok(
+    Math.abs(fitted.pathLossExponent - groundTruth.pathLossExponent) < 0.3,
+    `expected the outlier-robust fit close to the true path-loss exponent, got ${fitted.pathLossExponent}`
+  );
   db.close();
 });

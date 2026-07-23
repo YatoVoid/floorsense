@@ -20,6 +20,7 @@ export {
   getCalibrationProfile,
   DEFAULT_CALIBRATION_PROFILE,
   MIN_CALIBRATION_SAMPLES,
+  MIN_CALIBRATION_SAMPLES_PER_AP_NODE,
 } from "./calibration.ts";
 export type { CalibrationSampleInput } from "./calibration.ts";
 export { estimateCurrentPosition } from "./positioning.ts";
