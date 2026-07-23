@@ -6,3 +6,9 @@ build/
 .DS_Store
 
 .night-shift/
+
+packages/backend/data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
