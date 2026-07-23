@@ -11,7 +11,9 @@ import {
   getOwnerTier,
   tierAllowsHeatmap,
   applyTierToReturnVisitStats,
+  getVenuesForOwner,
 } from "@floorsense/backend";
+import { renderDashboardPage } from "./dashboardPage.ts";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const CALIBRATION_PATH = /^\/venues\/([^/]+)\/calibration-samples$/;
@@ -63,6 +65,14 @@ function writeAuthFailure(res: ServerResponse, status: 401 | 404): void {
   res.end(JSON.stringify({ error: status === 401 ? "unauthorized" : "not found" }));
 }
 
+/** Resolves the authenticated owner for a request with no venue-ownership check — for routes (like listing an owner's own venues) that aren't scoped to one specific venueId. */
+function resolveAuthenticatedOwner(db: DatabaseSync, req: IncomingMessage): { ok: true; ownerId: string } | { ok: false } {
+  const token = extractBearerToken(req);
+  const ownerId = token ? getOwnerIdForSessionToken(db, token, Date.now()) : null;
+  if (!ownerId) return { ok: false };
+  return { ok: true, ownerId };
+}
+
 /**
  * The owner-facing HTTP API. Unlike @floorsense/captive-portal (device-
  * facing, tenant/venue fixed per server instance), this server serves many
@@ -76,6 +86,12 @@ function writeAuthFailure(res: ServerResponse, status: 401 | 404): void {
 export function createOwnerPortalServer(db: DatabaseSync): Server {
   return createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+
+    if (req.method === "GET" && url.pathname === "/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(renderDashboardPage());
+      return;
+    }
 
     if (req.method === "POST" && url.pathname === "/auth/login") {
       readJsonBody(req)
@@ -105,6 +121,19 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
           res.writeHead(401, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "invalid credentials" }));
         });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/venues") {
+      const auth = resolveAuthenticatedOwner(db, req);
+      if (!auth.ok) {
+        writeAuthFailure(res, 401);
+        return;
+      }
+
+      const venues = getVenuesForOwner(db, auth.ownerId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(venues));
       return;
     }
 

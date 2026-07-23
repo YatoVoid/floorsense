@@ -28,6 +28,18 @@ async function withServer(db: ReturnType<typeof openDatabase>, fn: (baseUrl: str
   }
 }
 
+test("GET / serves the dashboard page as HTML containing the login form", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(baseUrl);
+    assert.strictEqual(res.status, 200);
+    assert.ok(res.headers.get("content-type")?.includes("text/html"));
+    const html = await res.text();
+    assert.match(html, /<form id="login-form">/);
+  });
+  db.close();
+});
+
 test("POST /auth/login with correct credentials returns a usable token", async () => {
   const db = openDatabase(":memory:");
   createOwnerWithPassword(db, "Login Test Owner", "correct-password");
@@ -65,6 +77,39 @@ test("POST /auth/login: unknown owner and wrong password produce byte-identical 
     assert.strictEqual(wrongPasswordRes.status, unknownOwnerRes.status);
     const [wrongBody, unknownBody] = await Promise.all([wrongPasswordRes.text(), unknownOwnerRes.text()]);
     assert.strictEqual(wrongBody, unknownBody, "the two failure responses must be byte-identical — no information leak");
+  });
+  db.close();
+});
+
+test("GET /venues rejects a request with no token", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues`);
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("GET /venues returns only the calling owner's own venues", async () => {
+  const db = openDatabase(":memory:");
+  const ownerA = createOwnerWithPassword(db, "Venues Owner A", "password-a");
+  createVenue(db, ownerA.id, { name: "Venue A1", floorWidth: 10, floorHeight: 8 });
+  createVenue(db, ownerA.id, { name: "Venue A2", floorWidth: 12, floorHeight: 9 });
+
+  const ownerB = createOwnerWithPassword(db, "Venues Owner B", "password-b");
+  createVenue(db, ownerB.id, { name: "Venue B1", floorWidth: 10, floorHeight: 8 });
+
+  const tokenA = createSession(db, ownerA.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues`, { headers: { Authorization: `Bearer ${tokenA}` } });
+    assert.strictEqual(res.status, 200);
+    const venues = (await res.json()) as Array<{ name: string }>;
+    assert.strictEqual(venues.length, 2, "must see exactly owner A's own venues, never owner B's");
+    assert.deepStrictEqual(
+      venues.map((v) => v.name).sort(),
+      ["Venue A1", "Venue A2"]
+    );
   });
   db.close();
 });
