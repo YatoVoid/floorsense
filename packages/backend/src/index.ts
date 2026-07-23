@@ -14,4 +14,8 @@ export {
 } from "./calibration.ts";
 export type { CalibrationSampleInput } from "./calibration.ts";
 export { estimateCurrentPosition } from "./positioning.ts";
+export { reconstructSessions, getSessionsForVenue, getSessionsForDevice } from "./sessions.ts";
+export type { DeviceSession } from "./sessions.ts";
+export { SESSION_GAP_MS, mergeSessionsIntoVisits, computeReturnVisitStats } from "./returnVisits.ts";
+export type { Visit, DeviceReturnStats, ReturnVisitStats } from "./returnVisits.ts";
 export { seedDemoData } from "./seed.ts";

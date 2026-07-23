@@ -62,6 +62,32 @@ test("no emitted event ever contains a raw sim-device identifier", () => {
   assert.ok(!serialized.includes("sim-device-"), "a raw simulated device id leaked into an emitted event");
 });
 
+test("an injected now() clock controls emitted event timestamps instead of the real wall clock", () => {
+  let currentTime = 1_000_000;
+  const adapter = new SimulatedApAdapter({
+    tenantId: "tenant-1",
+    venueId: "venue-1",
+    apNodes: [{ apNodeId: "ap-1", x: 0, y: 0 }],
+    salt: "test-salt",
+    deviceCount: 1,
+    firstJoinProbabilityPerTick: 1,
+    meanDwellTicks: 100,
+    random: () => 0.5,
+    now: () => currentTime,
+  });
+
+  const events: ApEvent[] = [];
+  adapter.on("event", (event: ApEvent) => events.push(event));
+
+  adapter.tick();
+  assert.strictEqual(events[0]?.timestamp, 1_000_000);
+
+  currentTime = 999_000_000; // jump far forward, simulating a real gap without waiting
+  adapter.tick();
+  const secondEvent = events[events.length - 1];
+  assert.strictEqual(secondEvent?.timestamp, 999_000_000);
+});
+
 test("getGroundTruthPositions reflects real position/joined state and never leaks a raw sim-device id", () => {
   const adapter = new SimulatedApAdapter({
     tenantId: "tenant-1",

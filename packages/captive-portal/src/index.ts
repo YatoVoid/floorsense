@@ -9,3 +9,5 @@ export { renderSignagePage } from "./signage.ts";
 export type { SignageInput } from "./signage.ts";
 export { runPositioningDemo } from "./positioningDemo.ts";
 export type { PositioningDemoResult } from "./positioningDemo.ts";
+export { runSessionsDemo } from "./sessionsDemo.ts";
+export type { SessionsDemoResult } from "./sessionsDemo.ts";

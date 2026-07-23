@@ -18,6 +18,8 @@ export interface SimulatedApAdapterConfig {
   tickIntervalMs?: number;
   /** Injectable PRNG (0..1, like Math.random) so tests can be deterministic. */
   random?: () => number;
+  /** Injectable clock (ms epoch, like Date.now) so event timestamps can be controlled — e.g. to simulate a real gap between visits without waiting in real time. */
+  now?: () => number;
   /** Average dwell time in ticks before a joined device leaves. */
   meanDwellTicks?: number;
   /** Probability per tick that a currently-away device rejoins (simulating a return visit). */
@@ -61,8 +63,9 @@ export function distance(ax: number, ay: number, bx: number, by: number): number
 }
 
 export class SimulatedApAdapter extends EventEmitter {
-  private readonly config: Required<Omit<SimulatedApAdapterConfig, "random">> & {
+  private readonly config: Required<Omit<SimulatedApAdapterConfig, "random" | "now">> & {
     random: () => number;
+    now: () => number;
   };
   private readonly devices: SimulatedDevice[];
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -76,6 +79,7 @@ export class SimulatedApAdapter extends EventEmitter {
       floorHeight: 15,
       tickIntervalMs: 1000,
       random: Math.random,
+      now: Date.now,
       meanDwellTicks: 30,
       rejoinProbabilityPerTick: 0.02,
       firstJoinProbabilityPerTick: 0.05,
@@ -112,7 +116,7 @@ export class SimulatedApAdapter extends EventEmitter {
   /** Advances the simulation by exactly one tick. Safe to call directly in tests. */
   tick(): void {
     this.tickCount += 1;
-    const now = Date.now();
+    const now = this.config.now();
     const { random } = this.config;
 
     for (const device of this.devices) {
