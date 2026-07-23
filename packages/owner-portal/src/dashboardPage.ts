@@ -355,6 +355,13 @@ export function renderTierPicker(pricing: TierPricing | null): string {
     .join(" ");
 }
 
+/** Empty string when there's no tier yet (logged out) - the header badge simply shows nothing. */
+export function renderPlanBadge(tier: string | null): string {
+  if (!tier) return "";
+  const badgeClass = tier === "premium" ? "badge-premium" : tier === "standard" ? "badge-standard" : "badge-basic";
+  return `<span class="plan-badge ${badgeClass}">${escapeHtml(tier)}</span>`;
+}
+
 export interface BillingHistoryEntry {
   tier: string;
   kind: string;
@@ -408,6 +415,7 @@ export function renderDashboardPage(): string {
     buildApNodeCreationPayload.toString(),
     formatPriceCents.toString(),
     renderTierPicker.toString(),
+    renderPlanBadge.toString(),
     renderBillingSection.toString(),
   ].join("\n\n");
 
@@ -418,85 +426,178 @@ export function renderDashboardPage(): string {
   <title>FloorSense Owner Dashboard</title>
   <style>
     :root {
-      --color-accent: #2563eb;
-      --color-accent-dark: #1d4ed8;
-      --color-muted: #6b7280;
-      --color-border: #e2e8f0;
+      --color-bg: #f6f7fb;
+      --color-surface: #ffffff;
+      --color-text: #0f172a;
+      --color-text-muted: #64748b;
+      --color-accent: #4f46e5;
+      --color-accent-dark: #4338ca;
+      --color-accent-soft: #eef2ff;
+      --color-border: #e5e7eb;
+      --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 20px rgba(15, 23, 42, 0.05);
+      --shadow-card-hover: 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 28px rgba(15, 23, 42, 0.09);
       --space-sm: 0.5rem;
       --space-md: 1rem;
       --space-lg: 1.5rem;
-      --radius: 0.5rem;
+      --radius: 0.75rem;
+      --radius-sm: 0.5rem;
     }
+    * { box-sizing: border-box; }
     body {
-      font-family: system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
       max-width: 40rem;
-      margin: 2rem auto;
+      margin: 0 auto 3rem;
       padding: 0 1rem;
-      color: #1f2937;
-      line-height: 1.5;
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.55;
     }
-    h1 { margin-bottom: var(--space-lg); }
-    h2 { margin: 0 0 var(--space-md); font-size: 1.1rem; }
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      padding: 1.25rem 0;
+      margin-bottom: var(--space-lg);
+      border-bottom: 1px solid var(--color-border);
+    }
+    .brand { display: flex; align-items: center; gap: 0.6rem; margin: 0; font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+    .brand-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 0.6rem;
+      background: linear-gradient(135deg, var(--color-accent), #7c3aed);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .header-right { display: flex; align-items: center; gap: var(--space-md); }
+    .plan-badge {
+      display: inline-block;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: capitalize;
+      letter-spacing: 0.01em;
+    }
+    .badge-basic { background: #f1f5f9; color: #475569; }
+    .badge-standard { background: var(--color-accent-soft); color: var(--color-accent-dark); }
+    .badge-premium { background: #fef3c7; color: #92400e; }
+    h2 {
+      margin: 0 0 var(--space-md);
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    h2::before { content: ""; width: 0.35rem; height: 1rem; border-radius: 999px; background: var(--color-accent); display: inline-block; }
     .section-card {
       border: 1px solid var(--color-border);
       border-radius: var(--radius);
       padding: var(--space-lg);
       margin-bottom: var(--space-lg);
-      background: #fff;
+      background: var(--color-surface);
+      box-shadow: var(--shadow-card);
+      transition: box-shadow 0.2s ease;
+      animation: fade-in-up 0.35s ease both;
+    }
+    .section-card:hover { box-shadow: var(--shadow-card-hover); }
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    input[type="text"], input[type="password"], input[type="number"], select {
+      font: inherit;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      color: var(--color-text);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, select:focus {
+      outline: none;
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 3px var(--color-accent-soft);
     }
     .btn {
       display: inline-block;
-      padding: 0.5rem 1rem;
-      border-radius: var(--radius);
+      padding: 0.55rem 1.1rem;
+      border-radius: var(--radius-sm);
       border: 1px solid transparent;
-      font-size: 0.95rem;
+      font: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
       cursor: pointer;
-      transition: background-color 0.15s ease, border-color 0.15s ease;
+      transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
     }
-    .btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; box-shadow: 0 1px 2px rgba(79, 70, 229, 0.25); }
     .btn-primary:hover { background: var(--color-accent-dark); border-color: var(--color-accent-dark); }
-    .btn-secondary { background: #fff; border-color: var(--color-border); color: #1f2937; }
-    .btn-secondary:hover { background: #f3f4f6; }
-    .heatmap-grid { display: grid; gap: 1px; margin: 1rem 0; }
+    .btn-secondary { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text); }
+    .btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .heatmap-grid { display: grid; gap: 1px; margin: 1rem 0; border-radius: var(--radius-sm); overflow: hidden; }
     .heatmap-cell { aspect-ratio: 1; background-color: #eee; }
     .hour-chart { display: flex; align-items: flex-end; gap: 2px; height: 6rem; margin: 1rem 0; }
-    .hour-bar { width: 6px; background: steelblue; }
-    table { border-collapse: collapse; width: 100%; }
-    td, th { border: 1px solid #ccc; padding: 0.25rem 0.5rem; text-align: left; }
-    .upgrade-required { color: #a00; }
-    .floor-plan-caption { color: var(--color-muted); font-style: italic; margin: 0 0 var(--space-sm); }
-    .floor-plan { position: relative; width: 100%; max-width: 30rem; background: #f5f5f5; border: 1px solid #ccc; cursor: crosshair; }
-    .ap-node-marker { position: absolute; width: 10px; height: 10px; margin: -5px; background: steelblue; border-radius: 50%; }
+    .hour-bar { width: 6px; background: var(--color-accent); border-radius: 2px 2px 0 0; }
+    table { border-collapse: collapse; width: 100%; border-radius: var(--radius-sm); overflow: hidden; }
+    td, th { padding: 0.5rem 0.65rem; text-align: left; border-bottom: 1px solid var(--color-border); }
+    th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-text-muted); font-weight: 600; }
+    tbody tr:last-child td { border-bottom: none; }
+    .upgrade-required { color: #b45309; }
+    .floor-plan-caption { color: var(--color-text-muted); font-style: italic; margin: 0 0 var(--space-sm); }
+    .floor-plan { position: relative; width: 100%; max-width: 30rem; background: #f8fafc; border: 1px solid var(--color-border); border-radius: var(--radius-sm); cursor: crosshair; }
+    .ap-node-marker { position: absolute; width: 10px; height: 10px; margin: -5px; background: var(--color-accent); border-radius: 50%; }
     .marked-position-marker { position: absolute; width: 12px; height: 12px; margin: -6px; background: crimson; border-radius: 50%; border: 2px solid #fff; }
     .pending-ap-node-marker { position: absolute; width: 12px; height: 12px; margin: -6px; background: orange; border-radius: 50%; border: 2px dashed #fff; }
-    .no-data { color: var(--color-muted); font-style: italic; }
-    .success { color: #060; }
-    .error { color: #a00; }
+    .no-data {
+      color: var(--color-text-muted);
+      font-style: italic;
+      padding: 0.85rem 1rem;
+      border: 1px dashed var(--color-border);
+      border-radius: var(--radius-sm);
+      margin: 0;
+    }
+    .success { color: #15803d; }
+    .error { color: #b91c1c; }
     #app-section { display: none; }
+    #logout-button { display: none; }
   </style>
 </head>
 <body>
-  <h1>FloorSense Owner Dashboard</h1>
+  <header class="app-header">
+    <h1 class="brand"><span class="brand-mark" aria-hidden="true">FS</span>FloorSense</h1>
+    <div class="header-right">
+      <span id="header-plan-badge"></span>
+      <button id="logout-button" class="btn btn-secondary">Log out</button>
+    </div>
+  </header>
 
-  <div class="section-card">
+  <div id="auth-section" class="section-card">
     <form id="login-form">
       <input id="login-name" type="text" placeholder="Owner name" required />
       <input id="login-password" type="password" placeholder="Password" required />
       <div id="tier-picker-container" style="display:none;"></div>
       <button id="login-submit-button" type="submit" class="btn btn-primary">Log in</button>
     </form>
+    <p id="payment-confirmation" class="success"></p>
+    <p><a href="#" id="auth-mode-toggle">New business? Register here</a></p>
+    <p id="login-error" style="color:#b91c1c;"></p>
   </div>
-  <p id="payment-confirmation" class="success"></p>
-  <p><a href="#" id="auth-mode-toggle">New business? Register here</a></p>
-  <p id="login-error" style="color:#a00;"></p>
 
   <div id="app-section">
-    <button id="logout-button" class="btn btn-secondary">Log out</button>
     <div class="section-card">
       <h2>Plan &amp; Billing</h2>
       <div id="billing-section-container"></div>
     </div>
     <div class="section-card">
+      <h2>Venue</h2>
       <p>
         <label for="venue-select">Venue:</label>
         <select id="venue-select"></select>
@@ -542,16 +643,23 @@ ${embeddedFunctions}
       return token ? { Authorization: "Bearer " + token } : {};
     }
 
+    function hideApp() {
+      document.getElementById("app-section").style.display = "none";
+      document.getElementById("auth-section").style.display = "block";
+      document.getElementById("logout-button").style.display = "none";
+      document.getElementById("header-plan-badge").innerHTML = "";
+    }
+
     function handleAuthFailure() {
       localStorage.removeItem(TOKEN_KEY);
-      document.getElementById("app-section").style.display = "none";
-      document.getElementById("login-form").style.display = "block";
+      hideApp();
       document.getElementById("login-error").textContent = "Your session expired. Please log in again.";
     }
 
     function showApp() {
-      document.getElementById("login-form").style.display = "none";
+      document.getElementById("auth-section").style.display = "none";
       document.getElementById("app-section").style.display = "block";
+      document.getElementById("logout-button").style.display = "inline-block";
       loadBillingSection();
     }
 
@@ -564,6 +672,7 @@ ${embeddedFunctions}
         .then(function (history) {
           if (!history) return;
           document.getElementById("billing-section-container").innerHTML = renderBillingSection(history);
+          document.getElementById("header-plan-badge").innerHTML = renderPlanBadge(history.length > 0 ? history[0].tier : null);
           var simulateButton = document.getElementById("simulate-monthly-charge-button");
           if (simulateButton) {
             simulateButton.addEventListener("click", function () {
@@ -843,8 +952,7 @@ ${embeddedFunctions}
 
     document.getElementById("logout-button").addEventListener("click", function () {
       localStorage.removeItem(TOKEN_KEY);
-      document.getElementById("app-section").style.display = "none";
-      document.getElementById("login-form").style.display = "block";
+      hideApp();
     });
 
     if (localStorage.getItem(TOKEN_KEY)) {

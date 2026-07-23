@@ -21,6 +21,7 @@ export {
   buildApNodeCreationPayload,
   formatPriceCents,
   renderTierPicker,
+  renderPlanBadge,
   renderBillingSection,
 } from "./dashboardPage.ts";
 export type {

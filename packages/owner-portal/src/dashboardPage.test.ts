@@ -17,6 +17,7 @@ import {
   buildApNodeCreationPayload,
   formatPriceCents,
   renderTierPicker,
+  renderPlanBadge,
   renderBillingSection,
 } from "./dashboardPage.ts";
 
@@ -322,6 +323,16 @@ test("renderTierPicker: with real pricing, renders one radio per tier with its f
   assert.match(html, /\$49\.00\/mo/);
 });
 
+test("renderPlanBadge: null tier renders nothing (logged-out header state)", () => {
+  assert.strictEqual(renderPlanBadge(null), "");
+});
+
+test("renderPlanBadge: each tier gets its own distinct badge class", () => {
+  assert.match(renderPlanBadge("basic"), /badge-basic/);
+  assert.match(renderPlanBadge("standard"), /badge-standard/);
+  assert.match(renderPlanBadge("premium"), /badge-premium/);
+});
+
 test("renderBillingSection: with no history, shows a no-data message and no table", () => {
   const html = renderBillingSection([]);
   assert.doesNotMatch(html, /<table/);
@@ -396,6 +407,26 @@ test("renderDashboardPage: sections are wrapped in cards, and primary/secondary 
   assert.match(html, /\.btn-primary/, "expected a .btn-primary style rule");
   assert.match(html, /\.btn-secondary/, "expected a .btn-secondary style rule");
   assert.match(html, /\.section-card/, "expected a .section-card style rule");
+});
+
+test("renderDashboardPage: has a header with branding and a plan badge slot, and the auth block is one show/hide unit", () => {
+  const html = renderDashboardPage();
+
+  assert.match(html, /<header class="app-header">/);
+  assert.match(html, /class="brand-mark"/);
+  assert.match(html, /id="header-plan-badge"/);
+
+  // The auth block (form + toggle + error) must be ONE container so
+  // showApp()/logout hide it as a unit, not leave an empty wrapper behind.
+  assert.match(html, /<div id="auth-section" class="section-card">/);
+  const authSectionMatch = /<div id="auth-section" class="section-card">([\s\S]*?)\n  <\/div>/.exec(html);
+  assert.ok(authSectionMatch, "expected a single #auth-section wrapping the login form, toggle, and error");
+  const authSectionHtml = authSectionMatch![1]!;
+  assert.match(authSectionHtml, /id="login-form"/);
+  assert.match(authSectionHtml, /id="auth-mode-toggle"/);
+  assert.match(authSectionHtml, /id="login-error"/);
+
+  assert.match(html, /function renderPlanBadge/);
 });
 
 test("renderDashboardPage: an expired/invalid session (401) is handled explicitly at every authenticated fetch, not left to fall through to res.json()", () => {
