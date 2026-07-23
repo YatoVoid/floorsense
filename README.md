@@ -39,7 +39,7 @@ npm test
 ```
 
 That installs all 6 workspace packages and runs the full test suite
-(around 215 tests).
+(around 240 tests).
 
 ### Try the owner dashboard
 

@@ -60,7 +60,8 @@ clean option later if Node's numeric tooling ever falls short.
   AP nodes, weighted-centroid fallback for 1-2.
 - `packages/backend`: SQLite persistence, multi-tenant data model,
   consent gating, calibration fitting, session/dwell-time
-  reconstruction, heatmap generation, and subscription tiers.
+  reconstruction, heatmap generation, subscription tiers, and
+  simulated billing (signup + monthly transactions).
 - `packages/captive-portal`: the device-facing HTTP server: the
   consent splash page and the accept endpoint a joining device hits.
 - `packages/owner-portal`: the owner-facing HTTP server: login,
