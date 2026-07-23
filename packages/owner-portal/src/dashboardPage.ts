@@ -547,10 +547,31 @@ export function renderDashboardPage(): string {
     .btn-primary:hover { background: var(--color-accent-dark); border-color: var(--color-accent-dark); }
     .btn-secondary { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text); }
     .btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
-    .heatmap-grid { display: grid; gap: 1px; margin: 1rem 0; border-radius: var(--radius-sm); overflow: hidden; }
-    .heatmap-cell { aspect-ratio: 1; background-color: #eee; }
-    .hour-chart { display: flex; align-items: flex-end; gap: 2px; height: 6rem; margin: 1rem 0; }
-    .hour-bar { width: 6px; background: var(--color-accent); border-radius: 2px 2px 0 0; }
+    .heatmap-grid {
+      display: grid;
+      gap: 2px;
+      margin: 1rem 0;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: var(--color-bg);
+      padding: 2px;
+    }
+    .heatmap-cell {
+      aspect-ratio: 1;
+      background-color: #eee;
+      border-radius: 2px;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
+    }
+    .hour-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 6rem;
+      margin: 1rem 0;
+      padding: 0 0 1px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .hour-bar { width: 6px; min-height: 2px; background: var(--color-accent); border-radius: 2px 2px 0 0; }
     table { border-collapse: collapse; width: 100%; border-radius: var(--radius-sm); overflow: hidden; }
     td, th { padding: 0.5rem 0.65rem; text-align: left; border-bottom: 1px solid var(--color-border); }
     th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--color-text-muted); font-weight: 600; }
