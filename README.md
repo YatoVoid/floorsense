@@ -10,6 +10,21 @@ MAC address.
 This is a local-first proof of concept: everything below runs on your own
 laptop, no real access point or router hardware needed.
 
+## Screenshots
+
+Registering picks a plan and simulates the signup payment immediately:
+
+![Register with a plan picker](docs/screenshots/register.png)
+
+The dashboard shows the plan, billing history, venues, heatmap, and
+return-visit stats:
+
+![Owner dashboard](docs/screenshots/dashboard.png)
+
+Adding an AP node and marking a calibration position on the floor plan:
+
+![Floor-plan calibration](docs/screenshots/calibration.png)
+
 ## Requirements
 
 - Node.js 26.4.0 or newer (this repo relies on the built-in `node:sqlite`
