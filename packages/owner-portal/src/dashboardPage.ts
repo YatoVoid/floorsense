@@ -346,13 +346,18 @@ export function renderTierPicker(pricing: TierPricing | null): string {
     { id: "premium", label: "Premium" },
   ];
 
-  return tiers
+  const cards = tiers
     .map(
       (tier, index) =>
-        `<label><input type="radio" name="tier-picker" value="${tier.id}" ${index === 0 ? "checked" : ""} /> ` +
-        `${tier.label} - ${escapeHtml(formatPriceCents(pricing[tier.id]))}</label>`
+        '<label class="tier-card">' +
+        `<input type="radio" name="tier-picker" value="${tier.id}" class="tier-card-input" ${index === 0 ? "checked" : ""} />` +
+        `<span class="tier-card-name">${tier.label}</span>` +
+        `<span class="tier-card-price">${escapeHtml(formatPriceCents(pricing[tier.id]))}</span>` +
+        "</label>"
     )
-    .join(" ");
+    .join("");
+
+  return `<div class="tier-picker-grid">${cards}</div>`;
 }
 
 /** Empty string when there's no tier yet (logged out) - the header badge simply shows nothing. */
@@ -386,7 +391,7 @@ export function renderBillingSection(history: BillingHistoryEntry[]): string {
     .join("");
 
   return (
-    `<p>Current plan: <strong>${escapeHtml(currentTier)}</strong></p>` +
+    `<p>Current plan: ${renderPlanBadge(currentTier)}</p>` +
     "<table><thead><tr><th>Date</th><th>Type</th><th>Amount</th></tr></thead><tbody>" +
     rows +
     "</tbody></table>" +
@@ -566,6 +571,26 @@ export function renderDashboardPage(): string {
     }
     .success { color: #15803d; }
     .error { color: #b91c1c; }
+    .tier-picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin: 0.75rem 0; }
+    .tier-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
+      padding: 0.85rem 0.5rem;
+      border: 1.5px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .tier-card:hover { border-color: var(--color-accent); }
+    .tier-card-input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .tier-card-name { font-weight: 600; font-size: 0.9rem; }
+    .tier-card-price { font-size: 0.8rem; color: var(--color-text-muted); }
+    .tier-card:has(.tier-card-input:checked) { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+    .tier-card:has(.tier-card-input:checked) .tier-card-price { color: var(--color-accent-dark); }
     #app-section { display: none; }
     #logout-button { display: none; }
   </style>

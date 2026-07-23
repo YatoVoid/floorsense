@@ -323,6 +323,14 @@ test("renderTierPicker: with real pricing, renders one radio per tier with its f
   assert.match(html, /\$49\.00\/mo/);
 });
 
+test("renderTierPicker: renders three clickable plan cards, not raw inline radios", () => {
+  const html = renderTierPicker({ basic: 0, standard: 1900, premium: 4900 });
+  assert.match(html, /class="tier-picker-grid"/);
+  const cardCount = (html.match(/class="tier-card"/g) ?? []).length;
+  assert.strictEqual(cardCount, 3, "one card per tier");
+  assert.match(html, /class="tier-card-input"/);
+});
+
 test("renderPlanBadge: null tier renders nothing (logged-out header state)", () => {
   assert.strictEqual(renderPlanBadge(null), "");
 });
