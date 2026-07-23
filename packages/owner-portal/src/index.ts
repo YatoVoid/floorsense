@@ -15,9 +15,18 @@ export {
   renderCalibrationForm,
   buildCalibrationSamplePayload,
   renderCalibrationResult,
+  renderVenueCreationForm,
+  buildVenueCreationPayload,
 } from "./dashboardPage.ts";
-export type { HeatmapUpgradeRequired, MarkedPosition, CalibrationSampleValidationResult } from "./dashboardPage.ts";
+export type {
+  HeatmapUpgradeRequired,
+  MarkedPosition,
+  CalibrationSampleValidationResult,
+  VenueCreationValidationResult,
+} from "./dashboardPage.ts";
 export { runDashboardDemo } from "./dashboardDemo.ts";
 export type { DashboardDemoResult } from "./dashboardDemo.ts";
 export { runCalibrationToolDemo } from "./calibrationToolDemo.ts";
 export type { CalibrationToolDemoResult } from "./calibrationToolDemo.ts";
+export { runOnboardingDemo } from "./onboardingDemo.ts";
+export type { OnboardingDemoResult } from "./onboardingDemo.ts";

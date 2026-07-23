@@ -81,6 +81,115 @@ test("POST /auth/login: unknown owner and wrong password produce byte-identical 
   db.close();
 });
 
+test("POST /auth/register creates a real owner and returns an immediately-usable session token", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Brand New Owner", password: "a-real-password" }),
+    });
+    assert.strictEqual(res.status, 201);
+    const { token } = (await res.json()) as { token: string };
+    assert.ok(token.length > 0);
+
+    const venuesRes = await fetch(`${baseUrl}/venues`, { headers: { Authorization: `Bearer ${token}` } });
+    assert.strictEqual(venuesRes.status, 200, "the freshly issued token must work immediately, not just look valid");
+    const venues = await venuesRes.json();
+    assert.deepStrictEqual(venues, [], "a brand-new owner starts with zero venues");
+  });
+  db.close();
+});
+
+test("POST /auth/register rejects a duplicate name with 409, not a silent overwrite or a 500", async () => {
+  const db = openDatabase(":memory:");
+  createOwnerWithPassword(db, "Existing Owner", "first-password");
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Existing Owner", password: "second-password" }),
+    });
+    assert.strictEqual(res.status, 409);
+  });
+
+  const rows = db.prepare("SELECT id FROM owners WHERE name = ?").all("Existing Owner");
+  assert.strictEqual(rows.length, 1, "the duplicate registration attempt must not create a second row");
+  db.close();
+});
+
+test("POST /auth/register rejects a malformed body with 400", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Missing Password Owner" }),
+    });
+    assert.strictEqual(res.status, 400);
+  });
+  db.close();
+});
+
+test("POST /venues rejects a request with no token", async () => {
+  const db = openDatabase(":memory:");
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Unauthorized Venue", floorWidth: 10, floorHeight: 8 }),
+    });
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("POST /venues creates a real venue scoped to the authenticated owner, invisible to a different owner", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Venue Creator Owner", "password");
+  const otherOwner = createOwnerWithPassword(db, "Other Owner", "password");
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+  const otherToken = createSession(db, otherOwner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const createRes = await fetch(`${baseUrl}/venues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name: "My First Venue", floorWidth: 12, floorHeight: 9 }),
+    });
+    assert.strictEqual(createRes.status, 201);
+    const created = (await createRes.json()) as { id: string; name: string };
+    assert.strictEqual(created.name, "My First Venue");
+
+    const ownVenuesRes = await fetch(`${baseUrl}/venues`, { headers: { Authorization: `Bearer ${token}` } });
+    const ownVenues = (await ownVenuesRes.json()) as Array<{ id: string }>;
+    assert.strictEqual(ownVenues.length, 1);
+    assert.strictEqual(ownVenues[0]?.id, created.id);
+
+    const otherVenuesRes = await fetch(`${baseUrl}/venues`, { headers: { Authorization: `Bearer ${otherToken}` } });
+    const otherVenues = await otherVenuesRes.json();
+    assert.deepStrictEqual(otherVenues, [], "a different owner must never see the created venue");
+  });
+  db.close();
+});
+
+test("POST /venues rejects a malformed body with 400", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Malformed Venue Owner", "password");
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name: "No Dimensions Venue" }),
+    });
+    assert.strictEqual(res.status, 400);
+  });
+  db.close();
+});
+
 test("GET /venues rejects a request with no token", async () => {
   const db = openDatabase(":memory:");
   await withServer(db, async (baseUrl) => {

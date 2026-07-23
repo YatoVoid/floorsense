@@ -11,6 +11,8 @@ import {
   renderCalibrationForm,
   buildCalibrationSamplePayload,
   renderCalibrationResult,
+  renderVenueCreationForm,
+  buildVenueCreationPayload,
 } from "./dashboardPage.ts";
 
 test("escapeHtml escapes all five special characters", () => {
@@ -205,10 +207,42 @@ test("renderCalibrationResult: an error response renders the server's escaped er
   assert.match(html, /&lt;b&gt;not found&lt;\/b&gt;/);
 });
 
-test("renderDashboardPage: produces a page with login form markup, and its embedded <script> parses as valid JS", () => {
+test("renderVenueCreationForm: renders the empty-state message and a real creation form", () => {
+  const html = renderVenueCreationForm();
+  assert.match(html, /No venues yet/);
+  assert.match(html, /<form id="venue-creation-form">/);
+  assert.match(html, /venue-creation-width/);
+  assert.match(html, /venue-creation-height/);
+});
+
+test("buildVenueCreationPayload: valid input produces the exact typed body POST /venues expects", () => {
+  const result = buildVenueCreationPayload({ name: "My Cafe", floorWidth: "12.5", floorHeight: "8" });
+  assert.strictEqual(result.valid, true);
+  assert.ok(result.valid);
+  assert.deepStrictEqual(result.payload, { name: "My Cafe", floorWidth: 12.5, floorHeight: 8 });
+});
+
+test("buildVenueCreationPayload: an empty name is rejected", () => {
+  const result = buildVenueCreationPayload({ name: "   ", floorWidth: "10", floorHeight: "8" });
+  assert.strictEqual(result.valid, false);
+});
+
+test("buildVenueCreationPayload: a non-numeric or non-positive floor dimension is rejected", () => {
+  const nonNumeric = buildVenueCreationPayload({ name: "My Cafe", floorWidth: "not-a-number", floorHeight: "8" });
+  assert.strictEqual(nonNumeric.valid, false);
+
+  const zero = buildVenueCreationPayload({ name: "My Cafe", floorWidth: "0", floorHeight: "8" });
+  assert.strictEqual(zero.valid, false);
+
+  const negative = buildVenueCreationPayload({ name: "My Cafe", floorWidth: "-5", floorHeight: "8" });
+  assert.strictEqual(negative.valid, false);
+});
+
+test("renderDashboardPage: produces a page with login form markup, a register toggle, and its embedded <script> parses as valid JS", () => {
   const html = renderDashboardPage();
   assert.match(html, /<form id="login-form">/);
   assert.match(html, /login-password/);
+  assert.match(html, /id="auth-mode-toggle"/);
 
   const scriptMatch = /<script>([\s\S]*)<\/script>/.exec(html);
   assert.ok(scriptMatch, "expected an inline <script> block");
@@ -224,6 +258,8 @@ test("renderDashboardPage: produces a page with login form markup, and its embed
   assert.match(scriptBody, /function renderCalibrationForm/);
   assert.match(scriptBody, /function buildCalibrationSamplePayload/);
   assert.match(scriptBody, /function renderCalibrationResult/);
+  assert.match(scriptBody, /function renderVenueCreationForm/);
+  assert.match(scriptBody, /function buildVenueCreationPayload/);
 
   // A SyntaxError here would mean the embedded page JS is broken — this
   // only parses the source (function bodies aren't executed by

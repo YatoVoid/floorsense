@@ -261,6 +261,48 @@ export function renderCalibrationResult(result: { ok: boolean; body: unknown }):
   return '<p class="error">' + escapeHtml(message) + "</p>";
 }
 
+/** Pure: the "no venues yet" empty-state message plus a small venue-creation form, shown in place of a normal venue list for a brand-new owner. */
+export function renderVenueCreationForm(): string {
+  return (
+    '<div id="venue-creation">' +
+    "<p>No venues yet — create your first one:</p>" +
+    '<form id="venue-creation-form">' +
+    '<input id="venue-creation-name" type="text" placeholder="Venue name" required />' +
+    '<input id="venue-creation-width" type="number" step="0.1" placeholder="Floor width (meters)" required />' +
+    '<input id="venue-creation-height" type="number" step="0.1" placeholder="Floor height (meters)" required />' +
+    '<button type="submit">Create venue</button>' +
+    "</form>" +
+    "</div>"
+  );
+}
+
+export type VenueCreationValidationResult =
+  | { valid: true; payload: { name: string; floorWidth: number; floorHeight: number } }
+  | { valid: false; error: string };
+
+/**
+ * Validates and coerces raw venue-creation form input (all three fields
+ * arrive as strings — a DOM input's .value is always a string) into the
+ * exact body POST /venues expects. A UX nicety, not the security boundary:
+ * the server independently validates the same shape (KR10 task 2) and
+ * rejects a malformed body regardless of what this function does.
+ */
+export function buildVenueCreationPayload(input: {
+  name: string;
+  floorWidth: string;
+  floorHeight: string;
+}): VenueCreationValidationResult {
+  if (input.name.trim() === "") {
+    return { valid: false, error: "Enter a venue name." };
+  }
+  const floorWidth = Number(input.floorWidth);
+  const floorHeight = Number(input.floorHeight);
+  if (!Number.isFinite(floorWidth) || floorWidth <= 0 || !Number.isFinite(floorHeight) || floorHeight <= 0) {
+    return { valid: false, error: "Enter positive numeric floor width and height." };
+  }
+  return { valid: true, payload: { name: input.name, floorWidth, floorHeight } };
+}
+
 /**
  * The static HTML shell. The inline <script> embeds the EXACT source of
  * escapeHtml/renderHeatmapSection/renderStatsSummary above via
@@ -283,6 +325,8 @@ export function renderDashboardPage(): string {
     renderCalibrationForm.toString(),
     buildCalibrationSamplePayload.toString(),
     renderCalibrationResult.toString(),
+    renderVenueCreationForm.toString(),
+    buildVenueCreationPayload.toString(),
   ].join("\n\n");
 
   return `<!doctype html>
@@ -313,8 +357,9 @@ export function renderDashboardPage(): string {
   <form id="login-form">
     <input id="login-name" type="text" placeholder="Owner name" required />
     <input id="login-password" type="password" placeholder="Password" required />
-    <button type="submit">Log in</button>
+    <button id="login-submit-button" type="submit">Log in</button>
   </form>
+  <p><a href="#" id="auth-mode-toggle">New business? Register here</a></p>
   <p id="login-error" style="color:#a00;"></p>
 
   <div id="app-section">
@@ -323,6 +368,7 @@ export function renderDashboardPage(): string {
       <label for="venue-select">Venue:</label>
       <select id="venue-select"></select>
     </p>
+    <div id="venue-creation-container"></div>
     <h2>Heatmap</h2>
     <div id="heatmap-container"><p class="no-data">Select a venue to view its heatmap.</p></div>
     <h2>Return-visit stats</h2>
@@ -367,8 +413,40 @@ ${embeddedFunctions}
             option.textContent = venue.name;
             select.appendChild(option);
           });
-          if (venues.length > 0) loadVenueData(venues[0].id);
+
+          var creationContainer = document.getElementById("venue-creation-container");
+          if (venues.length === 0) {
+            creationContainer.innerHTML = renderVenueCreationForm();
+            bindVenueCreationForm();
+          } else {
+            creationContainer.innerHTML = "";
+            loadVenueData(venues[0].id);
+          }
         });
+    }
+
+    function bindVenueCreationForm() {
+      var form = document.getElementById("venue-creation-form");
+      if (!form) return;
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var validation = buildVenueCreationPayload({
+          name: document.getElementById("venue-creation-name").value,
+          floorWidth: document.getElementById("venue-creation-width").value,
+          floorHeight: document.getElementById("venue-creation-height").value,
+        });
+        if (!validation.valid) {
+          document.getElementById("login-error").textContent = validation.error;
+          return;
+        }
+        fetch("/venues", {
+          method: "POST",
+          headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+          body: JSON.stringify(validation.payload),
+        })
+          .then(function (res) { return res.json(); })
+          .then(function () { loadVenues(); });
+      });
     }
 
     function loadVenueData(venueId) {
@@ -440,19 +518,31 @@ ${embeddedFunctions}
       }
     }
 
+    var isRegisterMode = false;
+
+    document.getElementById("auth-mode-toggle").addEventListener("click", function (e) {
+      e.preventDefault();
+      isRegisterMode = !isRegisterMode;
+      document.getElementById("login-submit-button").textContent = isRegisterMode ? "Register" : "Log in";
+      e.target.textContent = isRegisterMode ? "Already registered? Log in here" : "New business? Register here";
+      document.getElementById("login-error").textContent = "";
+    });
+
     document.getElementById("login-form").addEventListener("submit", function (e) {
       e.preventDefault();
       var name = document.getElementById("login-name").value;
       var password = document.getElementById("login-password").value;
-      fetch("/auth/login", {
+      var endpoint = isRegisterMode ? "/auth/register" : "/auth/login";
+      fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name, password: password }),
       })
-        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, status: res.status, body: body }; }); })
         .then(function (result) {
           if (!result.ok) {
-            document.getElementById("login-error").textContent = "Login failed.";
+            document.getElementById("login-error").textContent =
+              result.status === 409 ? "That name is already registered." : isRegisterMode ? "Registration failed." : "Login failed.";
             return;
           }
           localStorage.setItem(TOKEN_KEY, result.body.token);

@@ -10,6 +10,26 @@ import {
   type ScryptFn,
 } from "./auth.ts";
 
+test("registering a second owner with an already-taken name throws a UNIQUE constraint violation (errcode 2067), not a silent duplicate", () => {
+  const db = openDatabase(":memory:");
+  createOwnerWithPassword(db, "Duplicate Name Owner", "first-password");
+
+  assert.throws(
+    () => createOwnerWithPassword(db, "Duplicate Name Owner", "second-password"),
+    (err: unknown) => {
+      const e = err as { code?: string; errcode?: number; message?: string };
+      assert.strictEqual(e.code, "ERR_SQLITE_ERROR");
+      assert.strictEqual(e.errcode, 2067, "expected SQLite's SQLITE_CONSTRAINT_UNIQUE extended result code");
+      assert.match(e.message ?? "", /UNIQUE constraint failed/);
+      return true;
+    }
+  );
+
+  const rows = db.prepare("SELECT id FROM owners WHERE name = ?").all("Duplicate Name Owner");
+  assert.strictEqual(rows.length, 1, "the failed second registration must not leave a duplicate row");
+  db.close();
+});
+
 test("the raw password never appears as a substring anywhere in the stored owner row", () => {
   const db = openDatabase(":memory:");
   const password = "correct-horse-battery-staple-42";

@@ -13,6 +13,8 @@ import {
   applyTierToReturnVisitStats,
   getVenuesForOwner,
   getApNodesForVenue,
+  createOwnerWithPassword,
+  createVenue,
 } from "@floorsense/backend";
 import { renderDashboardPage } from "./dashboardPage.ts";
 
@@ -36,6 +38,24 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
       }
     });
   });
+}
+
+/**
+ * SQLite's own extended result code for a UNIQUE constraint violation
+ * (SQLITE_CONSTRAINT_UNIQUE), verified empirically against this repo's
+ * node:sqlite version (a scratch test reproducing the exact error node:sqlite
+ * throws) rather than assumed from documentation alone. Narrower and more
+ * reliable than the generic `code: "ERR_SQLITE_ERROR"`, which any SQLite
+ * error (not just a duplicate name) would also carry.
+ */
+const SQLITE_CONSTRAINT_UNIQUE = 2067;
+
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err as { code?: string; errcode?: number }).code === "ERR_SQLITE_ERROR" &&
+    (err as { code?: string; errcode?: number }).errcode === SQLITE_CONSTRAINT_UNIQUE
+  );
 }
 
 function extractBearerToken(req: IncomingMessage): string | null {
@@ -126,6 +146,43 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/auth/register") {
+      readJsonBody(req)
+        .then((body) => {
+          const b = body !== null && typeof body === "object" ? (body as Record<string, unknown>) : null;
+          const name = b?.["name"];
+          const password = b?.["password"];
+
+          if (typeof name !== "string" || name.length === 0 || typeof password !== "string" || password.length === 0) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "name and password are required" }));
+            return;
+          }
+
+          let owner;
+          try {
+            owner = createOwnerWithPassword(db, name, password);
+          } catch (err) {
+            if (isUniqueConstraintViolation(err)) {
+              res.writeHead(409, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: "that name is already registered" }));
+              return;
+            }
+            throw err; // not a duplicate-name error — a genuine unexpected failure, let it surface as 500 below.
+          }
+
+          // Register-then-log-in: one round trip, mirroring /auth/login's response shape.
+          const token = createSession(db, owner.id, Date.now(), SESSION_TTL_MS);
+          res.writeHead(201, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ token }));
+        })
+        .catch(() => {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "internal error" }));
+        });
+      return;
+    }
+
     if (req.method === "GET" && url.pathname === "/venues") {
       const auth = resolveAuthenticatedOwner(db, req);
       if (!auth.ok) {
@@ -136,6 +193,37 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
       const venues = getVenuesForOwner(db, auth.ownerId);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(venues));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/venues") {
+      const auth = resolveAuthenticatedOwner(db, req);
+      if (!auth.ok) {
+        writeAuthFailure(res, 401);
+        return;
+      }
+
+      readJsonBody(req)
+        .then((body) => {
+          const b = body !== null && typeof body === "object" ? (body as Record<string, unknown>) : null;
+          const name = b?.["name"];
+          const floorWidth = b?.["floorWidth"];
+          const floorHeight = b?.["floorHeight"];
+
+          if (typeof name !== "string" || typeof floorWidth !== "number" || typeof floorHeight !== "number") {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "invalid body" }));
+            return;
+          }
+
+          const venue = createVenue(db, auth.ownerId, { name, floorWidth, floorHeight });
+          res.writeHead(201, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(venue));
+        })
+        .catch(() => {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "internal error" }));
+        });
       return;
     }
 

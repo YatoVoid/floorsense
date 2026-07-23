@@ -16,7 +16,7 @@ export const DEFAULT_DB_PATH = join(PACKAGE_ROOT, "data", "floorsense.sqlite");
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS owners (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   created_at INTEGER NOT NULL,
   password_hash TEXT,
   password_salt TEXT,
