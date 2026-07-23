@@ -35,3 +35,5 @@ export { runOnboardingDemo } from "./onboardingDemo.ts";
 export type { OnboardingDemoResult } from "./onboardingDemo.ts";
 export { runApNodeCreationDemo } from "./apNodeCreationDemo.ts";
 export type { ApNodeCreationDemoResult } from "./apNodeCreationDemo.ts";
+export { runBillingDemo } from "./billingDemo.ts";
+export type { BillingDemoResult } from "./billingDemo.ts";
