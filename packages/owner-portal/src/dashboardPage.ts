@@ -114,19 +114,28 @@ export function pixelToFloorCoordinates(
   };
 }
 
-/** Renders the floor plan div. AP nodes and the marked position are placed by percentage, not pixels. */
-export function renderFloorPlan(venue: Venue, apNodes: ApNodeRecord[], markedPosition: MarkedPosition | null): string {
+/** Renders the floor plan div. AP nodes, the calibration mark, and a pending new AP node are all placed by percentage, not pixels. */
+export function renderFloorPlan(
+  venue: Venue,
+  apNodes: ApNodeRecord[],
+  markedPosition: MarkedPosition | null,
+  pendingApNodePosition: MarkedPosition | null
+): string {
   const aspectRatio = venue.floorWidth / venue.floorHeight;
+
+  const toPct = (pos: MarkedPosition) => ({
+    left: ((pos.x / venue.floorWidth) * 100).toFixed(2),
+    top: ((pos.y / venue.floorHeight) * 100).toFixed(2),
+  });
 
   const apNodeMarkers = apNodes
     .map((node) => {
-      const leftPct = (node.x / venue.floorWidth) * 100;
-      const topPct = (node.y / venue.floorHeight) * 100;
+      const pct = toPct({ x: node.x, y: node.y });
       return (
         '<div class="ap-node-marker" style="left: ' +
-        leftPct.toFixed(2) +
+        pct.left +
         "%; top: " +
-        topPct.toFixed(2) +
+        pct.top +
         '%;" title="' +
         escapeHtml(node.apNodeId) +
         '"></div>'
@@ -135,11 +144,17 @@ export function renderFloorPlan(venue: Venue, apNodes: ApNodeRecord[], markedPos
     .join("");
 
   const markedMarker = markedPosition
-    ? '<div class="marked-position-marker" style="left: ' +
-      ((markedPosition.x / venue.floorWidth) * 100).toFixed(2) +
-      "%; top: " +
-      ((markedPosition.y / venue.floorHeight) * 100).toFixed(2) +
-      '%;"></div>'
+    ? (() => {
+        const pct = toPct(markedPosition);
+        return '<div class="marked-position-marker" style="left: ' + pct.left + "%; top: " + pct.top + '%;"></div>';
+      })()
+    : "";
+
+  const pendingMarker = pendingApNodePosition
+    ? (() => {
+        const pct = toPct(pendingApNodePosition);
+        return '<div class="pending-ap-node-marker" style="left: ' + pct.left + "%; top: " + pct.top + '%;"></div>';
+      })()
     : "";
 
   return (
@@ -148,12 +163,16 @@ export function renderFloorPlan(venue: Venue, apNodes: ApNodeRecord[], markedPos
     ';">' +
     apNodeMarkers +
     markedMarker +
+    pendingMarker +
     "</div>"
   );
 }
 
-/** Renders the calibration form. Just a prompt until a position is marked, then the AP-node picker plus a manual RSSI field (browsers can't read WiFi signal strength). */
+/** Renders the calibration form. Needs at least one AP node to offer; then it's a prompt until a position is marked, then the AP-node picker plus a manual RSSI field (browsers can't read WiFi signal strength). */
 export function renderCalibrationForm(apNodes: ApNodeRecord[], markedPosition: MarkedPosition | null): string {
+  if (apNodes.length === 0) {
+    return '<p class="no-data">Add an AP node below before calibrating. There\'s nothing to pick from yet.</p>';
+  }
   if (!markedPosition) {
     return '<p class="no-data">Click on the floor plan above to mark a known position.</p>';
   }
@@ -220,6 +239,47 @@ export function renderCalibrationResult(result: { ok: boolean; body: unknown }):
   return '<p class="error">' + escapeHtml(message) + "</p>";
 }
 
+/** Renders the "place a new AP node" form. Empty until a floor-plan click sets a pending position. */
+export function renderApNodePlacementForm(pending: MarkedPosition | null): string {
+  if (!pending) {
+    return '<p class="no-data">Click on the floor plan above to place the new AP node.</p>';
+  }
+  return (
+    '<form id="ap-node-form">' +
+    "<p>New AP node position: (" +
+    pending.x.toFixed(2) +
+    ", " +
+    pending.y.toFixed(2) +
+    ")</p>" +
+    '<input type="hidden" id="ap-node-x" value="' +
+    pending.x +
+    '" />' +
+    '<input type="hidden" id="ap-node-y" value="' +
+    pending.y +
+    '" />' +
+    '<label for="ap-node-id">AP node name:</label>' +
+    '<input id="ap-node-id" type="text" placeholder="e.g. ap-1" required />' +
+    '<button type="submit">Save AP node</button>' +
+    '<button type="button" id="ap-node-cancel">Cancel</button>' +
+    "</form>"
+  );
+}
+
+export type ApNodeCreationValidationResult =
+  | { valid: true; payload: { apNodeId: string; x: number; y: number } }
+  | { valid: false; error: string };
+
+/** Validates form input into the body POST /ap-nodes expects. Just a UX check; the server validates independently too. */
+export function buildApNodeCreationPayload(input: { apNodeId: string; x: number; y: number }): ApNodeCreationValidationResult {
+  if (input.apNodeId.trim() === "") {
+    return { valid: false, error: "Enter a name for this AP node." };
+  }
+  if (!Number.isFinite(input.x) || !Number.isFinite(input.y)) {
+    return { valid: false, error: "Invalid position, click the floor plan again." };
+  }
+  return { valid: true, payload: { apNodeId: input.apNodeId, x: input.x, y: input.y } };
+}
+
 /** Empty-state message plus a small form, shown when a new owner has no venues yet. */
 export function renderVenueCreationForm(): string {
   return (
@@ -273,6 +333,8 @@ export function renderDashboardPage(): string {
     renderCalibrationResult.toString(),
     renderVenueCreationForm.toString(),
     buildVenueCreationPayload.toString(),
+    renderApNodePlacementForm.toString(),
+    buildApNodeCreationPayload.toString(),
   ].join("\n\n");
 
   return `<!doctype html>
@@ -292,6 +354,7 @@ export function renderDashboardPage(): string {
     .floor-plan { position: relative; width: 100%; max-width: 30rem; background: #f5f5f5; border: 1px solid #ccc; cursor: crosshair; }
     .ap-node-marker { position: absolute; width: 10px; height: 10px; margin: -5px; background: steelblue; border-radius: 50%; }
     .marked-position-marker { position: absolute; width: 12px; height: 12px; margin: -6px; background: crimson; border-radius: 50%; border: 2px solid #fff; }
+    .pending-ap-node-marker { position: absolute; width: 12px; height: 12px; margin: -6px; background: orange; border-radius: 50%; border: 2px dashed #fff; }
     .success { color: #060; }
     .error { color: #a00; }
     #app-section { display: none; }
@@ -321,6 +384,8 @@ export function renderDashboardPage(): string {
     <div id="stats-container"></div>
     <h2>Floor-plan calibration</h2>
     <div id="floor-plan-container"></div>
+    <p><button type="button" id="add-ap-node-toggle">Add AP node</button></p>
+    <div id="ap-node-form-container"></div>
     <div id="calibration-form-container"></div>
     <div id="calibration-result-container"></div>
   </div>
@@ -333,6 +398,8 @@ ${embeddedFunctions}
     var currentVenueId = null;
     var currentApNodes = [];
     var markedPosition = null;
+    var addingApNode = false;
+    var pendingApNodePosition = null;
 
     function authHeaders() {
       var token = localStorage.getItem(TOKEN_KEY);
@@ -398,6 +465,8 @@ ${embeddedFunctions}
     function loadVenueData(venueId) {
       currentVenueId = venueId;
       markedPosition = null;
+      addingApNode = false;
+      pendingApNodePosition = null;
 
       fetch("/venues/" + venueId + "/heatmap", { headers: authHeaders() })
         .then(function (res) { return res.json(); })
@@ -422,7 +491,9 @@ ${embeddedFunctions}
     function renderCalibrationUi() {
       var venue = venuesById[currentVenueId];
       if (!venue) return;
-      document.getElementById("floor-plan-container").innerHTML = renderFloorPlan(venue, currentApNodes, markedPosition);
+      document.getElementById("floor-plan-container").innerHTML = renderFloorPlan(venue, currentApNodes, markedPosition, pendingApNodePosition);
+      document.getElementById("add-ap-node-toggle").textContent = addingApNode ? "Cancel adding AP node" : "Add AP node";
+      document.getElementById("ap-node-form-container").innerHTML = addingApNode ? renderApNodePlacementForm(pendingApNodePosition) : "";
       document.getElementById("calibration-form-container").innerHTML = renderCalibrationForm(currentApNodes, markedPosition);
       document.getElementById("calibration-result-container").innerHTML = "";
 
@@ -432,7 +503,56 @@ ${embeddedFunctions}
           var rect = floorPlanEl.getBoundingClientRect();
           var pixelX = e.clientX - rect.left;
           var pixelY = e.clientY - rect.top;
-          markedPosition = pixelToFloorCoordinates(pixelX, pixelY, rect.width, rect.height, venue.floorWidth, venue.floorHeight);
+          var coords = pixelToFloorCoordinates(pixelX, pixelY, rect.width, rect.height, venue.floorWidth, venue.floorHeight);
+          if (addingApNode) {
+            pendingApNodePosition = coords;
+          } else {
+            markedPosition = coords;
+          }
+          renderCalibrationUi();
+        });
+      }
+
+      var apNodeForm = document.getElementById("ap-node-form");
+      if (apNodeForm) {
+        apNodeForm.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var validation = buildApNodeCreationPayload({
+            apNodeId: document.getElementById("ap-node-id").value,
+            x: Number(document.getElementById("ap-node-x").value),
+            y: Number(document.getElementById("ap-node-y").value),
+          });
+          if (!validation.valid) {
+            document.getElementById("ap-node-form-container").innerHTML += '<p class="error">' + validation.error + "</p>";
+            return;
+          }
+          fetch("/venues/" + currentVenueId + "/ap-nodes", {
+            method: "POST",
+            headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+            body: JSON.stringify(validation.payload),
+          })
+            .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body: body }; }); })
+            .then(function (result) {
+              if (!result.ok) {
+                document.getElementById("ap-node-form-container").innerHTML += '<p class="error">' + (result.body.error || "Failed to save AP node.") + "</p>";
+                return;
+              }
+              addingApNode = false;
+              pendingApNodePosition = null;
+              fetch("/venues/" + currentVenueId + "/ap-nodes", { headers: authHeaders() })
+                .then(function (res) { return res.json(); })
+                .then(function (apNodes) {
+                  currentApNodes = apNodes;
+                  renderCalibrationUi();
+                });
+            });
+        });
+      }
+
+      var apNodeCancel = document.getElementById("ap-node-cancel");
+      if (apNodeCancel) {
+        apNodeCancel.addEventListener("click", function () {
+          pendingApNodePosition = null;
           renderCalibrationUi();
         });
       }
@@ -500,6 +620,12 @@ ${embeddedFunctions}
 
     document.getElementById("venue-select").addEventListener("change", function (e) {
       loadVenueData(e.target.value);
+    });
+
+    document.getElementById("add-ap-node-toggle").addEventListener("click", function () {
+      addingApNode = !addingApNode;
+      pendingApNodePosition = null;
+      renderCalibrationUi();
     });
 
     document.getElementById("logout-button").addEventListener("click", function () {

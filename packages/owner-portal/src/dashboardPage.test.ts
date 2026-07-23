@@ -13,6 +13,8 @@ import {
   renderCalibrationResult,
   renderVenueCreationForm,
   buildVenueCreationPayload,
+  renderApNodePlacementForm,
+  buildApNodeCreationPayload,
 } from "./dashboardPage.ts";
 
 test("escapeHtml escapes all five special characters", () => {
@@ -140,31 +142,44 @@ const TEST_AP_NODES: ApNodeRecord[] = [
 ];
 
 test("renderFloorPlan: renders no AP-node markers when there are none, and no marked-position marker when null", () => {
-  const html = renderFloorPlan(TEST_VENUE, [], null);
+  const html = renderFloorPlan(TEST_VENUE, [], null, null);
   assert.doesNotMatch(html, /ap-node-marker/);
   assert.doesNotMatch(html, /marked-position-marker/);
+  assert.doesNotMatch(html, /pending-ap-node-marker/);
 });
 
 test("renderFloorPlan: renders one marker per AP node, positioned as a percentage of floorWidth/floorHeight", () => {
-  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, null);
-  const markerCount = (html.match(/ap-node-marker/g) ?? []).length;
+  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, null, null);
+  const markerCount = (html.match(/class="ap-node-marker"/g) ?? []).length;
   assert.strictEqual(markerCount, 2);
   // ap-1 is at x=2 of floorWidth=10 -> 20.00%
   assert.match(html, /left: 20\.00%/);
 });
 
 test("renderFloorPlan: renders the marked position as a distinct marker when present", () => {
-  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, { x: 5, y: 4 });
+  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, { x: 5, y: 4 }, null);
   assert.match(html, /marked-position-marker/);
 });
 
-test("renderCalibrationForm: with no marked position, shows only a prompt, no submit form", () => {
+test("renderFloorPlan: renders a pending AP-node marker distinctly from the calibration mark", () => {
+  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, null, { x: 3, y: 3 });
+  assert.match(html, /pending-ap-node-marker/);
+  assert.doesNotMatch(html, /marked-position-marker/);
+});
+
+test("renderCalibrationForm: with zero AP nodes, shows an explicit prompt to add one first, never an empty dropdown", () => {
+  const html = renderCalibrationForm([], null);
+  assert.match(html, /Add an AP node/);
+  assert.doesNotMatch(html, /<select/, "must never render a select with zero options");
+});
+
+test("renderCalibrationForm: with AP nodes but no marked position, shows only a prompt, no submit form", () => {
   const html = renderCalibrationForm(TEST_AP_NODES, null);
   assert.match(html, /Click on the floor plan/);
   assert.doesNotMatch(html, /<form/);
 });
 
-test("renderCalibrationForm: with a marked position, shows the AP-node select, populated known X/Y, and a submit button", () => {
+test("renderCalibrationForm: with AP nodes and a marked position, shows the AP-node select, populated known X/Y, and a submit button", () => {
   const html = renderCalibrationForm(TEST_AP_NODES, { x: 5, y: 4 });
   assert.match(html, /<form id="calibration-form">/);
   assert.match(html, /ap-1/);
@@ -238,11 +253,43 @@ test("buildVenueCreationPayload: a non-numeric or non-positive floor dimension i
   assert.strictEqual(negative.valid, false);
 });
 
-test("renderDashboardPage: produces a page with login form markup, a register toggle, and its embedded <script> parses as valid JS", () => {
+test("renderApNodePlacementForm: with no pending position, shows only a prompt, no form", () => {
+  const html = renderApNodePlacementForm(null);
+  assert.match(html, /Click on the floor plan/);
+  assert.doesNotMatch(html, /<form/);
+});
+
+test("renderApNodePlacementForm: with a pending position, shows the name field, populated hidden x/y, and save/cancel buttons", () => {
+  const html = renderApNodePlacementForm({ x: 3, y: 4 });
+  assert.match(html, /<form id="ap-node-form">/);
+  assert.match(html, /value="3"/);
+  assert.match(html, /value="4"/);
+  assert.match(html, /id="ap-node-cancel"/);
+});
+
+test("buildApNodeCreationPayload: valid input produces the exact typed body POST /ap-nodes expects", () => {
+  const result = buildApNodeCreationPayload({ apNodeId: "ap-1", x: 3, y: 4 });
+  assert.strictEqual(result.valid, true);
+  assert.ok(result.valid);
+  assert.deepStrictEqual(result.payload, { apNodeId: "ap-1", x: 3, y: 4 });
+});
+
+test("buildApNodeCreationPayload: an empty name is rejected", () => {
+  const result = buildApNodeCreationPayload({ apNodeId: "   ", x: 3, y: 4 });
+  assert.strictEqual(result.valid, false);
+});
+
+test("buildApNodeCreationPayload: a non-finite position is rejected", () => {
+  const result = buildApNodeCreationPayload({ apNodeId: "ap-1", x: NaN, y: 4 });
+  assert.strictEqual(result.valid, false);
+});
+
+test("renderDashboardPage: produces a page with login form markup, a register toggle, an Add AP node control, and its embedded <script> parses as valid JS", () => {
   const html = renderDashboardPage();
   assert.match(html, /<form id="login-form">/);
   assert.match(html, /login-password/);
   assert.match(html, /id="auth-mode-toggle"/);
+  assert.match(html, /id="add-ap-node-toggle"/);
 
   const scriptMatch = /<script>([\s\S]*)<\/script>/.exec(html);
   assert.ok(scriptMatch, "expected an inline <script> block");
@@ -260,6 +307,8 @@ test("renderDashboardPage: produces a page with login form markup, a register to
   assert.match(scriptBody, /function renderCalibrationResult/);
   assert.match(scriptBody, /function renderVenueCreationForm/);
   assert.match(scriptBody, /function buildVenueCreationPayload/);
+  assert.match(scriptBody, /function renderApNodePlacementForm/);
+  assert.match(scriptBody, /function buildApNodeCreationPayload/);
 
   // Just parses the source, doesn't run it, so missing browser globals are fine here.
   assert.doesNotThrow(() => new Function(scriptBody), "the embedded page script must be syntactically valid JS");
