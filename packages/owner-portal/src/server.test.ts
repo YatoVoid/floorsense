@@ -1,12 +1,18 @@
 import assert from "node:assert";
 import { test } from "node:test";
 import type { AddressInfo } from "node:net";
+import { hashDeviceId } from "@floorsense/shared";
 import {
   openDatabase,
   createOwnerWithPassword,
   createOwner,
   createVenue,
+  createApNode,
   createSession,
+  recordConsentGrant,
+  ingestApEvent,
+  computeVenueHeatmap,
+  computeReturnVisitStats,
 } from "@floorsense/backend";
 import { createOwnerPortalServer } from "./server.ts";
 
@@ -140,5 +146,129 @@ test("a valid token for the venue's real owner persists a real calibration sampl
   assert.strictEqual(rows[0]?.rssi, -55);
   assert.strictEqual(rows[0]?.known_x, 3);
   assert.strictEqual(rows[0]?.known_y, 4);
+  db.close();
+});
+
+test("GET /venues/:venueId/heatmap rejects a request with no token", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwner(db, "Heatmap No Token Owner");
+  const venue = createVenue(db, owner.id, { name: "Heatmap Venue", floorWidth: 10, floorHeight: 8 });
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/heatmap`);
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/heatmap rejects a valid token for a different owner's venue", async () => {
+  const db = openDatabase(":memory:");
+  const ownerA = createOwnerWithPassword(db, "Heatmap Owner A", "password-a");
+  const ownerB = createOwner(db, "Heatmap Owner B");
+  const venueB = createVenue(db, ownerB.id, { name: "Heatmap Venue B", floorWidth: 10, floorHeight: 8 });
+  const tokenA = createSession(db, ownerA.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venueB.id}/heatmap`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    assert.strictEqual(res.status, 404);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/heatmap returns the same data computeVenueHeatmap would return directly", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Heatmap Legit Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "Heatmap Legit Venue", floorWidth: 10, floorHeight: 8 });
+  const apNode = createApNode(db, venue.id, { apNodeId: "ap-1", x: 0, y: 0 });
+  const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", "test-salt");
+  recordConsentGrant(db, { tenantId: owner.id, venueId: venue.id, hashedDeviceId, termsVersion: "v1" });
+  ingestApEvent(db, {
+    type: "signal_reading",
+    hashedDeviceId,
+    tenantId: owner.id,
+    venueId: venue.id,
+    apNodeId: apNode.apNodeId,
+    timestamp: 1000,
+    rssi: -55,
+  });
+
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+  const expected = computeVenueHeatmap(db, owner.id, venue.id);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/heatmap`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.deepStrictEqual(json, expected);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/return-visit-stats rejects a request with no token", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwner(db, "Stats No Token Owner");
+  const venue = createVenue(db, owner.id, { name: "Stats Venue", floorWidth: 10, floorHeight: 8 });
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/return-visit-stats`);
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/return-visit-stats rejects a valid token for a different owner's venue", async () => {
+  const db = openDatabase(":memory:");
+  const ownerA = createOwnerWithPassword(db, "Stats Owner A", "password-a");
+  const ownerB = createOwner(db, "Stats Owner B");
+  const venueB = createVenue(db, ownerB.id, { name: "Stats Venue B", floorWidth: 10, floorHeight: 8 });
+  const tokenA = createSession(db, ownerA.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venueB.id}/return-visit-stats`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    assert.strictEqual(res.status, 404);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/return-visit-stats returns the same data computeReturnVisitStats would return directly", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "Stats Legit Owner", "password");
+  const venue = createVenue(db, owner.id, { name: "Stats Legit Venue", floorWidth: 10, floorHeight: 8 });
+  const hashedDeviceId = hashDeviceId("aa:bb:cc:dd:ee:ff", "test-salt");
+  recordConsentGrant(db, { tenantId: owner.id, venueId: venue.id, hashedDeviceId, termsVersion: "v1" });
+  ingestApEvent(db, {
+    type: "join",
+    hashedDeviceId,
+    tenantId: owner.id,
+    venueId: venue.id,
+    apNodeId: "ap-1",
+    timestamp: 1000,
+  });
+  ingestApEvent(db, {
+    type: "leave",
+    hashedDeviceId,
+    tenantId: owner.id,
+    venueId: venue.id,
+    apNodeId: "ap-1",
+    timestamp: 4000,
+  });
+
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+  const expected = computeReturnVisitStats(db, owner.id, venue.id);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/return-visit-stats`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.deepStrictEqual(json, expected);
+  });
   db.close();
 });

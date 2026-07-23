@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type Server } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import type { DatabaseSync } from "node:sqlite";
 import {
   verifyOwnerCredentials,
@@ -6,10 +6,14 @@ import {
   getOwnerIdForSessionToken,
   venueBelongsToOwner,
   recordCalibrationSample,
+  computeVenueHeatmap,
+  computeReturnVisitStats,
 } from "@floorsense/backend";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const CALIBRATION_PATH = /^\/venues\/([^/]+)\/calibration-samples$/;
+const HEATMAP_PATH = /^\/venues\/([^/]+)\/heatmap$/;
+const RETURN_VISIT_STATS_PATH = /^\/venues\/([^/]+)\/return-visit-stats$/;
 
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve) => {
@@ -32,6 +36,28 @@ function extractBearerToken(req: IncomingMessage): string | null {
   if (typeof header !== "string") return null;
   const match = /^Bearer (.+)$/.exec(header);
   return match?.[1] ?? null;
+}
+
+type AuthResolution = { ok: true; ownerId: string } | { ok: false; status: 401 | 404 };
+
+/**
+ * Resolves the authenticated owner for a request AND verifies (via a real
+ * DB query, never trusting the client) that they own the given venueId.
+ * 404 — not 403 — for a wrong owner or a nonexistent venue: don't confirm
+ * to a non-owner that a venueId exists at all, consistent with login's own
+ * no-information-leak principle.
+ */
+function resolveAuthenticatedOwnerForVenue(db: DatabaseSync, req: IncomingMessage, venueId: string): AuthResolution {
+  const token = extractBearerToken(req);
+  const ownerId = token ? getOwnerIdForSessionToken(db, token, Date.now()) : null;
+  if (!ownerId) return { ok: false, status: 401 };
+  if (!venueBelongsToOwner(db, ownerId, venueId)) return { ok: false, status: 404 };
+  return { ok: true, ownerId };
+}
+
+function writeAuthFailure(res: ServerResponse, status: 401 | 404): void {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: status === 401 ? "unauthorized" : "not found" }));
 }
 
 /**
@@ -82,22 +108,9 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
     const calibrationMatch = CALIBRATION_PATH.exec(url.pathname);
     if (req.method === "POST" && calibrationMatch) {
       const venueId = calibrationMatch[1] as string;
-      const token = extractBearerToken(req);
-      const ownerId = token ? getOwnerIdForSessionToken(db, token, Date.now()) : null;
-
-      if (!ownerId) {
-        res.writeHead(401, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "unauthorized" }));
-        return;
-      }
-
-      // Real DB-level ownership check — a valid token for a DIFFERENT
-      // owner's venueId must not succeed. 404 (not 403): don't confirm to a
-      // non-owner that this venueId exists at all, consistent with login's
-      // own no-information-leak principle.
-      if (!venueBelongsToOwner(db, ownerId, venueId)) {
-        res.writeHead(404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "not found" }));
+      const auth = resolveAuthenticatedOwnerForVenue(db, req, venueId);
+      if (!auth.ok) {
+        writeAuthFailure(res, auth.status);
         return;
       }
 
@@ -120,7 +133,7 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
             return;
           }
 
-          recordCalibrationSample(db, { tenantId: ownerId, venueId, apNodeId, rssi, knownX, knownY });
+          recordCalibrationSample(db, { tenantId: auth.ownerId, venueId, apNodeId, rssi, knownX, knownY });
           res.writeHead(201, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ recorded: true }));
         })
@@ -128,6 +141,36 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "internal error" }));
         });
+      return;
+    }
+
+    const heatmapMatch = HEATMAP_PATH.exec(url.pathname);
+    if (req.method === "GET" && heatmapMatch) {
+      const venueId = heatmapMatch[1] as string;
+      const auth = resolveAuthenticatedOwnerForVenue(db, req, venueId);
+      if (!auth.ok) {
+        writeAuthFailure(res, auth.status);
+        return;
+      }
+
+      const heatmap = computeVenueHeatmap(db, auth.ownerId, venueId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(heatmap));
+      return;
+    }
+
+    const statsMatch = RETURN_VISIT_STATS_PATH.exec(url.pathname);
+    if (req.method === "GET" && statsMatch) {
+      const venueId = statsMatch[1] as string;
+      const auth = resolveAuthenticatedOwnerForVenue(db, req, venueId);
+      if (!auth.ok) {
+        writeAuthFailure(res, auth.status);
+        return;
+      }
+
+      const stats = computeReturnVisitStats(db, auth.ownerId, venueId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(stats));
       return;
     }
 

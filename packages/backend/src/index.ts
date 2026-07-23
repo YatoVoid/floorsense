@@ -6,6 +6,7 @@ export {
   getVenuesForOwner,
   getApNodesForVenue,
   venueBelongsToOwner,
+  getVenue,
 } from "./tenancy.ts";
 export type { Owner, Venue, ApNodeRecord } from "./tenancy.ts";
 export { ingestApEvent, getEventsForVenue } from "./ingest.ts";
@@ -32,4 +33,19 @@ export {
   getOwnerIdForSessionToken,
 } from "./auth.ts";
 export type { ScryptFn } from "./auth.ts";
+export {
+  buildHeatmapFromEstimates,
+  groupIntoSnapshots,
+  computeWeightedEstimatesForDevice,
+  computeVenueHeatmap,
+  DEFAULT_HEATMAP_CONFIG,
+} from "./heatmap.ts";
+export type {
+  HeatmapGridConfig,
+  HeatmapCell,
+  VenueHeatmap,
+  WeightedPositionEstimate,
+  SnapshotReading,
+  Snapshot,
+} from "./heatmap.ts";
 export { seedDemoData } from "./seed.ts";

@@ -1,7 +1,15 @@
 import assert from "node:assert";
 import { test } from "node:test";
 import { openDatabase } from "./db.ts";
-import { createOwner, createVenue, createApNode, getVenuesForOwner, getApNodesForVenue, venueBelongsToOwner } from "./tenancy.ts";
+import {
+  createOwner,
+  createVenue,
+  createApNode,
+  getVenuesForOwner,
+  getApNodesForVenue,
+  venueBelongsToOwner,
+  getVenue,
+} from "./tenancy.ts";
 
 test("createOwner/createVenue round-trip and getVenuesForOwner returns them", () => {
   const db = openDatabase(":memory:");
@@ -58,5 +66,20 @@ test("venueBelongsToOwner is true for the real owner, false for a wrong owner or
   assert.strictEqual(venueBelongsToOwner(db, ownerA.id, venueA.id), true);
   assert.strictEqual(venueBelongsToOwner(db, ownerB.id, venueA.id), false);
   assert.strictEqual(venueBelongsToOwner(db, ownerA.id, "not-a-real-venue-id"), false);
+  db.close();
+});
+
+test("getVenue returns the venue for its real owner, and null for a wrong owner or nonexistent venue", () => {
+  const db = openDatabase(":memory:");
+  const ownerA = createOwner(db, "Owner A");
+  const ownerB = createOwner(db, "Owner B");
+  const venueA = createVenue(db, ownerA.id, { name: "Venue A", floorWidth: 10, floorHeight: 8 });
+
+  const found = getVenue(db, ownerA.id, venueA.id);
+  assert.strictEqual(found?.id, venueA.id);
+  assert.strictEqual(found?.floorWidth, 10);
+
+  assert.strictEqual(getVenue(db, ownerB.id, venueA.id), null);
+  assert.strictEqual(getVenue(db, ownerA.id, "not-a-real-venue-id"), null);
   db.close();
 });

@@ -84,6 +84,30 @@ export function getVenuesForOwner(db: DatabaseSync, tenantId: string): Venue[] {
   }));
 }
 
+/** Tenant-scoped single-venue lookup — null for a nonexistent venue or one owned by someone else. */
+export function getVenue(db: DatabaseSync, tenantId: string, venueId: string): Venue | null {
+  const row = db.prepare("SELECT * FROM venues WHERE id = ? AND owner_id = ?").get(venueId, tenantId) as
+    | {
+        id: string;
+        owner_id: string;
+        name: string;
+        floor_width: number;
+        floor_height: number;
+        created_at: number;
+      }
+    | undefined;
+
+  if (!row) return null;
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    floorWidth: row.floor_width,
+    floorHeight: row.floor_height,
+    createdAt: row.created_at,
+  };
+}
+
 export function getApNodesForVenue(db: DatabaseSync, tenantId: string, venueId: string): ApNodeRecord[] {
   const rows = db
     .prepare(
