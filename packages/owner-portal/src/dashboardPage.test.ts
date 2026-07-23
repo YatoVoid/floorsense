@@ -1,7 +1,17 @@
 import assert from "node:assert";
 import { test } from "node:test";
-import type { VenueHeatmap, ReturnVisitStats } from "@floorsense/backend";
-import { escapeHtml, renderHeatmapSection, renderStatsSummary, renderDashboardPage } from "./dashboardPage.ts";
+import type { VenueHeatmap, ReturnVisitStats, Venue, ApNodeRecord } from "@floorsense/backend";
+import {
+  escapeHtml,
+  renderHeatmapSection,
+  renderStatsSummary,
+  renderDashboardPage,
+  pixelToFloorCoordinates,
+  renderFloorPlan,
+  renderCalibrationForm,
+  buildCalibrationSamplePayload,
+  renderCalibrationResult,
+} from "./dashboardPage.ts";
 
 test("escapeHtml escapes all five special characters", () => {
   assert.strictEqual(escapeHtml(`<script>&"'</script>`), "&lt;script&gt;&amp;&quot;&#39;&lt;/script&gt;");
@@ -85,6 +95,116 @@ test("renderStatsSummary escapes a hashedDeviceId-shaped string containing HTML-
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
+test("pixelToFloorCoordinates: a middle click scales proportionally", () => {
+  const result = pixelToFloorCoordinates(150, 100, 300, 200, 10, 10);
+  assert.strictEqual(result.x, 5);
+  assert.strictEqual(result.y, 5);
+});
+
+test("pixelToFloorCoordinates: the exact (0,0) corner maps to the exact floor origin", () => {
+  const result = pixelToFloorCoordinates(0, 0, 300, 200, 10, 8);
+  assert.strictEqual(result.x, 0);
+  assert.strictEqual(result.y, 0);
+});
+
+test("pixelToFloorCoordinates: the exact bottom-right corner maps to the exact floor bounds", () => {
+  const result = pixelToFloorCoordinates(300, 200, 300, 200, 10, 8);
+  assert.strictEqual(result.x, 10);
+  assert.strictEqual(result.y, 8);
+});
+
+test("pixelToFloorCoordinates: negative or beyond-container pixel input is clamped into the floor's bounds", () => {
+  const negative = pixelToFloorCoordinates(-50, -20, 300, 200, 10, 8);
+  assert.strictEqual(negative.x, 0);
+  assert.strictEqual(negative.y, 0);
+
+  const beyond = pixelToFloorCoordinates(400, 300, 300, 200, 10, 8);
+  assert.strictEqual(beyond.x, 10);
+  assert.strictEqual(beyond.y, 8);
+});
+
+const TEST_VENUE: Venue = {
+  id: "venue-1",
+  ownerId: "owner-1",
+  name: "Test Venue",
+  floorWidth: 10,
+  floorHeight: 8,
+  createdAt: 0,
+};
+
+const TEST_AP_NODES: ApNodeRecord[] = [
+  { id: "an-1", venueId: "venue-1", apNodeId: "ap-1", x: 2, y: 4, createdAt: 0 },
+  { id: "an-2", venueId: "venue-1", apNodeId: "ap-2", x: 8, y: 4, createdAt: 0 },
+];
+
+test("renderFloorPlan: renders no AP-node markers when there are none, and no marked-position marker when null", () => {
+  const html = renderFloorPlan(TEST_VENUE, [], null);
+  assert.doesNotMatch(html, /ap-node-marker/);
+  assert.doesNotMatch(html, /marked-position-marker/);
+});
+
+test("renderFloorPlan: renders one marker per AP node, positioned as a percentage of floorWidth/floorHeight", () => {
+  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, null);
+  const markerCount = (html.match(/ap-node-marker/g) ?? []).length;
+  assert.strictEqual(markerCount, 2);
+  // ap-1 is at x=2 of floorWidth=10 -> 20.00%
+  assert.match(html, /left: 20\.00%/);
+});
+
+test("renderFloorPlan: renders the marked position as a distinct marker when present", () => {
+  const html = renderFloorPlan(TEST_VENUE, TEST_AP_NODES, { x: 5, y: 4 });
+  assert.match(html, /marked-position-marker/);
+});
+
+test("renderCalibrationForm: with no marked position, shows only a prompt, no submit form", () => {
+  const html = renderCalibrationForm(TEST_AP_NODES, null);
+  assert.match(html, /Click on the floor plan/);
+  assert.doesNotMatch(html, /<form/);
+});
+
+test("renderCalibrationForm: with a marked position, shows the AP-node select, populated known X/Y, and a submit button", () => {
+  const html = renderCalibrationForm(TEST_AP_NODES, { x: 5, y: 4 });
+  assert.match(html, /<form id="calibration-form">/);
+  assert.match(html, /ap-1/);
+  assert.match(html, /ap-2/);
+  assert.match(html, /value="5"/);
+  assert.match(html, /Enter manually|enter manually/i);
+});
+
+test("buildCalibrationSamplePayload: valid input produces the exact typed body the endpoint expects", () => {
+  const result = buildCalibrationSamplePayload({ apNodeId: "ap-1", rssi: "-55.5", knownX: 3, knownY: 4 });
+  assert.strictEqual(result.valid, true);
+  assert.ok(result.valid);
+  assert.deepStrictEqual(result.payload, { apNodeId: "ap-1", rssi: -55.5, knownX: 3, knownY: 4 });
+});
+
+test("buildCalibrationSamplePayload: a missing apNodeId is rejected", () => {
+  const result = buildCalibrationSamplePayload({ apNodeId: "", rssi: "-55", knownX: 3, knownY: 4 });
+  assert.strictEqual(result.valid, false);
+});
+
+test("buildCalibrationSamplePayload: a non-numeric rssi string is rejected", () => {
+  const result = buildCalibrationSamplePayload({ apNodeId: "ap-1", rssi: "not-a-number", knownX: 3, knownY: 4 });
+  assert.strictEqual(result.valid, false);
+});
+
+test("buildCalibrationSamplePayload: an empty rssi string is rejected", () => {
+  const result = buildCalibrationSamplePayload({ apNodeId: "ap-1", rssi: "", knownX: 3, knownY: 4 });
+  assert.strictEqual(result.valid, false);
+});
+
+test("renderCalibrationResult: a successful response renders a success message", () => {
+  const html = renderCalibrationResult({ ok: true, body: { recorded: true } });
+  assert.match(html, /success/);
+  assert.match(html, /recorded/);
+});
+
+test("renderCalibrationResult: an error response renders the server's escaped error message", () => {
+  const html = renderCalibrationResult({ ok: false, body: { error: "<b>not found</b>" } });
+  assert.match(html, /error/);
+  assert.match(html, /&lt;b&gt;not found&lt;\/b&gt;/);
+});
+
 test("renderDashboardPage: produces a page with login form markup, and its embedded <script> parses as valid JS", () => {
   const html = renderDashboardPage();
   assert.match(html, /<form id="login-form">/);
@@ -99,6 +219,11 @@ test("renderDashboardPage: produces a page with login form markup, and its embed
   assert.match(scriptBody, /function escapeHtml/);
   assert.match(scriptBody, /function renderHeatmapSection/);
   assert.match(scriptBody, /function renderStatsSummary/);
+  assert.match(scriptBody, /function pixelToFloorCoordinates/);
+  assert.match(scriptBody, /function renderFloorPlan/);
+  assert.match(scriptBody, /function renderCalibrationForm/);
+  assert.match(scriptBody, /function buildCalibrationSamplePayload/);
+  assert.match(scriptBody, /function renderCalibrationResult/);
 
   // A SyntaxError here would mean the embedded page JS is broken — this
   // only parses the source (function bodies aren't executed by

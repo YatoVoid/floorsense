@@ -12,11 +12,13 @@ import {
   tierAllowsHeatmap,
   applyTierToReturnVisitStats,
   getVenuesForOwner,
+  getApNodesForVenue,
 } from "@floorsense/backend";
 import { renderDashboardPage } from "./dashboardPage.ts";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const CALIBRATION_PATH = /^\/venues\/([^/]+)\/calibration-samples$/;
+const AP_NODES_PATH = /^\/venues\/([^/]+)\/ap-nodes$/;
 const HEATMAP_PATH = /^\/venues\/([^/]+)\/heatmap$/;
 const RETURN_VISIT_STATS_PATH = /^\/venues\/([^/]+)\/return-visit-stats$/;
 
@@ -134,6 +136,27 @@ export function createOwnerPortalServer(db: DatabaseSync): Server {
       const venues = getVenuesForOwner(db, auth.ownerId);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(venues));
+      return;
+    }
+
+    const apNodesMatch = AP_NODES_PATH.exec(url.pathname);
+    if (req.method === "GET" && apNodesMatch) {
+      const venueId = apNodesMatch[1] as string;
+      const auth = resolveAuthenticatedOwnerForVenue(db, req, venueId);
+      if (!auth.ok) {
+        writeAuthFailure(res, auth.status);
+        return;
+      }
+
+      // Deliberately not tier-gated, same as the calibration-write route
+      // below: this is setup/write-adjacent data an owner needs to
+      // calibrate their OWN venue regardless of tier, not an analytics
+      // read — gating it would break Basic-tier owners' ability to use
+      // the calibration tool at all, contradicting "keep Basic genuinely
+      // useful."
+      const apNodes = getApNodesForVenue(db, auth.ownerId, venueId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(apNodes));
       return;
     }
 

@@ -114,6 +114,58 @@ test("GET /venues returns only the calling owner's own venues", async () => {
   db.close();
 });
 
+test("GET /venues/:venueId/ap-nodes rejects a request with no token", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwner(db, "AP Nodes No Token Owner");
+  const venue = createVenue(db, owner.id, { name: "AP Nodes No Token Venue", floorWidth: 10, floorHeight: 8 });
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/ap-nodes`);
+    assert.strictEqual(res.status, 401);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/ap-nodes rejects a valid token for a different owner's venue", async () => {
+  const db = openDatabase(":memory:");
+  const ownerA = createOwnerWithPassword(db, "AP Nodes Owner A", "password-a");
+  const ownerB = createOwner(db, "AP Nodes Owner B");
+  const venueB = createVenue(db, ownerB.id, { name: "AP Nodes Venue B", floorWidth: 10, floorHeight: 8 });
+  const tokenA = createSession(db, ownerA.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venueB.id}/ap-nodes`, {
+      headers: { Authorization: `Bearer ${tokenA}` },
+    });
+    assert.strictEqual(res.status, 404);
+  });
+  db.close();
+});
+
+test("GET /venues/:venueId/ap-nodes returns the real AP node list for the legitimate owner, unaffected by tier", async () => {
+  const db = openDatabase(":memory:");
+  const owner = createOwnerWithPassword(db, "AP Nodes Legit Owner", "password");
+  setOwnerTier(db, owner.id, "basic"); // deliberately basic — this route must not be tier-gated
+  const venue = createVenue(db, owner.id, { name: "AP Nodes Legit Venue", floorWidth: 10, floorHeight: 8 });
+  createApNode(db, venue.id, { apNodeId: "ap-1", x: 1, y: 2 });
+  createApNode(db, venue.id, { apNodeId: "ap-2", x: 8, y: 6 });
+  const token = createSession(db, owner.id, Date.now(), 60_000);
+
+  await withServer(db, async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/venues/${venue.id}/ap-nodes`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.strictEqual(res.status, 200);
+    const apNodes = (await res.json()) as Array<{ apNodeId: string }>;
+    assert.strictEqual(apNodes.length, 2);
+    assert.deepStrictEqual(
+      apNodes.map((n) => n.apNodeId).sort(),
+      ["ap-1", "ap-2"]
+    );
+  });
+  db.close();
+});
+
 test("the calibration endpoint rejects a request with no token", async () => {
   const db = openDatabase(":memory:");
   const owner = createOwner(db, "No Token Owner");

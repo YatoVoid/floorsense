@@ -5,7 +5,19 @@ export { runHeatmapDemo } from "./heatmapDemo.ts";
 export type { HeatmapDemoResult } from "./heatmapDemo.ts";
 export { runTierDemo } from "./tierDemo.ts";
 export type { TierDemoResult } from "./tierDemo.ts";
-export { escapeHtml, renderHeatmapSection, renderStatsSummary, renderDashboardPage } from "./dashboardPage.ts";
-export type { HeatmapUpgradeRequired } from "./dashboardPage.ts";
+export {
+  escapeHtml,
+  renderHeatmapSection,
+  renderStatsSummary,
+  renderDashboardPage,
+  pixelToFloorCoordinates,
+  renderFloorPlan,
+  renderCalibrationForm,
+  buildCalibrationSamplePayload,
+  renderCalibrationResult,
+} from "./dashboardPage.ts";
+export type { HeatmapUpgradeRequired, MarkedPosition, CalibrationSampleValidationResult } from "./dashboardPage.ts";
 export { runDashboardDemo } from "./dashboardDemo.ts";
 export type { DashboardDemoResult } from "./dashboardDemo.ts";
+export { runCalibrationToolDemo } from "./calibrationToolDemo.ts";
+export type { CalibrationToolDemoResult } from "./calibrationToolDemo.ts";
