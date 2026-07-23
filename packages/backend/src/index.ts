@@ -1,5 +1,12 @@
 export { openDatabase, DEFAULT_DB_PATH } from "./db.ts";
-export { createOwner, createVenue, createApNode, getVenuesForOwner, getApNodesForVenue } from "./tenancy.ts";
+export {
+  createOwner,
+  createVenue,
+  createApNode,
+  getVenuesForOwner,
+  getApNodesForVenue,
+  venueBelongsToOwner,
+} from "./tenancy.ts";
 export type { Owner, Venue, ApNodeRecord } from "./tenancy.ts";
 export { ingestApEvent, getEventsForVenue } from "./ingest.ts";
 export type { StoredApEvent, IngestResult } from "./ingest.ts";
@@ -18,4 +25,11 @@ export { reconstructSessions, getSessionsForVenue, getSessionsForDevice } from "
 export type { DeviceSession } from "./sessions.ts";
 export { SESSION_GAP_MS, mergeSessionsIntoVisits, computeReturnVisitStats } from "./returnVisits.ts";
 export type { Visit, DeviceReturnStats, ReturnVisitStats } from "./returnVisits.ts";
+export {
+  createOwnerWithPassword,
+  verifyOwnerCredentials,
+  createSession,
+  getOwnerIdForSessionToken,
+} from "./auth.ts";
+export type { ScryptFn } from "./auth.ts";
 export { seedDemoData } from "./seed.ts";

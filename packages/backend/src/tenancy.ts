@@ -108,3 +108,9 @@ export function getApNodesForVenue(db: DatabaseSync, tenantId: string, venueId: 
     createdAt: r.created_at,
   }));
 }
+
+/** Real DB-level ownership check — never trust a client's claim that it owns a given venueId. */
+export function venueBelongsToOwner(db: DatabaseSync, tenantId: string, venueId: string): boolean {
+  const row = db.prepare("SELECT 1 FROM venues WHERE id = ? AND owner_id = ?").get(venueId, tenantId);
+  return row !== undefined;
+}

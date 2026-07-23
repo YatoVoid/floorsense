@@ -17,7 +17,16 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS owners (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  password_hash TEXT,
+  password_salt TEXT
+);
+
+CREATE TABLE IF NOT EXISTS owner_sessions (
+  token TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES owners(id),
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS venues (
